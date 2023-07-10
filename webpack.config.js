@@ -11,6 +11,7 @@ const HtmlWebpackHarddiskPlugin = require("html-webpack-harddisk-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 const WebpackNotifierPlugin = require("webpack-notifier");
 const ReactRefreshPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
+const WorkboxPlugin = require('workbox-webpack-plugin');
 
 const fs = require("fs");
 const os = require("os");
@@ -228,6 +229,11 @@ const config = (module.exports = {
     }),
     // https://github.com/remarkjs/remark/discussions/903
     new webpack.ProvidePlugin({ process: "process/browser.js" }),
+    new WorkboxPlugin.InjectManifest({
+      swSrc: "./sw.js",
+      swDest: "./service-worker.js",
+      maximumFileSizeToCacheInBytes: 8000000
+    }),
   ],
 });
 
