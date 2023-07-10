@@ -113,6 +113,7 @@
     "tippy.js": "^6.3.5",
     "ttag": "1.7.15",
     "underscore": "~1.13.3",
+    "workbox-webpack-plugin": "^7.0.0",
     "yarn.lock": "^0.0.1-security",
     "yup": "^0.32.11",
     "z-index": "0.0.1"
