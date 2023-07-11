@@ -21,7 +21,7 @@ registerRoute(
 // ensure quick response for static assets that use cache busting
 registerRoute(({ url, request, sameOrigin }) => {
   return (
-    url.pathname.startsWith("/static/") &&
+    url.pathname.startsWith("/app/dist/") &&
     url.pathname.match(/.*\.[0-9a-f]{12}\..*/) &&
     ["image", "script", "style", "font"].includes(request.destination) &&
     sameOrigin
