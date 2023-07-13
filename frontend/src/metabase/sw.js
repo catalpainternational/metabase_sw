@@ -4,9 +4,6 @@ import {
   NetworkFirst,
   NetworkOnly,
 } from "workbox-strategies";
-import { precacheAndRoute } from "workbox-precaching";
-
-precacheAndRoute(self.__WB_MANIFEST || []);
 
 // network first for HTML pages
 registerRoute(
@@ -14,15 +11,12 @@ registerRoute(
   new NetworkFirst(),
 );
 
-// common XHR requests that can be slow
-// registerRoute(({url}) => url.pathname.endsWith("/jsi18n/"), new NetworkFirst());
-// registerRoute(({url}) => url.pathname.startsWith("/en/geo/data.geojson"), new StaleWhileRevalidate());
-
 // ensure quick response for static assets that use cache busting
 registerRoute(({ url, request, sameOrigin }) => {
   return (
-    url.pathname.startsWith("/app/dist/") &&
-    url.pathname.match(/.*\.[0-9a-f]{12}\..*/) &&
+    url.pathname.startsWith("/app/dist/") && // base path
+    url.pathname.match(/.*\..*/) && // file.ext
+    url.search.match(/[0-9a-f]{20}/) && // has a cache-busting search parameter
     ["image", "script", "style", "font"].includes(request.destination) &&
     sameOrigin
   );
