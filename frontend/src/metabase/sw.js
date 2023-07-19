@@ -1,21 +1,16 @@
-import { registerRoute, setDefaultHandler } from "workbox-routing";
-import {
-  StaleWhileRevalidate,
-  NetworkFirst,
-  NetworkOnly,
-} from "workbox-strategies";
-import { precacheAndRoute } from "workbox-precaching";
-
-precacheAndRoute(self.__WB_MANIFEST || []);
+/* global importScripts, workbox */
+importScripts(
+  "https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js",
+);
 
 // network first for HTML pages
-registerRoute(
+workbox.routing.registerRoute(
   ({ url }) => url.pathname === "/" || url.pathname === "/app/",
-  new NetworkFirst(),
+  new workbox.strategies.NetworkFirst(),
 );
 
 // ensure quick response for static assets that use cache busting
-registerRoute(({ url, request, sameOrigin }) => {
+workbox.routing.registerRoute(({ url, request, sameOrigin }) => {
   return (
     url.pathname.startsWith("/app/dist/") &&
     url.pathname.match(/.*\..*/) &&
@@ -23,26 +18,21 @@ registerRoute(({ url, request, sameOrigin }) => {
     ["image", "script", "style", "font"].includes(request.destination) &&
     sameOrigin
   );
-}, new StaleWhileRevalidate());
+}, new workbox.strategies.StaleWhileRevalidate());
 
-registerRoute(
+workbox.routing.registerRoute(
   ({ url }) => url.pathname.startsWith("/api/"),
-  new NetworkOnly(),
+  new workbox.strategies.NetworkOnly(),
   "POST",
 );
-registerRoute(
+workbox.routing.registerRoute(
   ({ url }) => url.pathname.startsWith("/api/"),
-  new NetworkOnly(),
+  new workbox.strategies.NetworkOnly(),
   "DELETE",
 );
 
-setDefaultHandler(new NetworkFirst());
-
-self.addEventListener("activate", function (event) {
-  console.info("%cSERVICE WORKER: activate", "background: purple");
-});
+workbox.routing.setDefaultHandler(new workbox.strategies.NetworkFirst());
 
 self.addEventListener("install", () => {
-  console.info("%cSERVICE WORKER: install", "background: orange");
   self.skipWaiting();
 });
