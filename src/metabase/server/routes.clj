@@ -50,6 +50,7 @@
   (GET "/favicon.ico" [] (response/resource-response (public-settings/application-favicon-url)))
   ;; the service worker file
   (GET "/service-worker.js" [] (route/resources "/" {:root "frontend_client/app/dist"}))
+  (GET "/service-worker.js.map" [] (route/resources "/" {:root "frontend_client/app/dist"}))
   ;; ^/api/health -> Health Check Endpoint
   (GET "/api/health" []
        (if (init-status/complete?)

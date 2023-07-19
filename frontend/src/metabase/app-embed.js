@@ -20,7 +20,7 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker
       .register("/service-worker.js")
       .then(registration => {
-        // console.debug('SW registered: ', registration);
+        console.warn("SW registered: ", registration);
       })
       .catch(registrationError => {
         console.warn("SW registration failed: ", registrationError);
