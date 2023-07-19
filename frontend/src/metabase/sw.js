@@ -1,9 +1,12 @@
-import { registerRoute } from "workbox-routing";
+import { registerRoute, setDefaultHandler } from "workbox-routing";
 import {
   StaleWhileRevalidate,
   NetworkFirst,
   NetworkOnly,
 } from "workbox-strategies";
+import { precacheAndRoute } from "workbox-precaching";
+
+precacheAndRoute(self.__WB_MANIFEST || []);
 
 // network first for HTML pages
 registerRoute(
@@ -14,9 +17,9 @@ registerRoute(
 // ensure quick response for static assets that use cache busting
 registerRoute(({ url, request, sameOrigin }) => {
   return (
-    url.pathname.startsWith("/app/dist/") && // base path
-    url.pathname.match(/.*\..*/) && // file.ext
-    url.search.match(/[0-9a-f]{20}/) && // has a cache-busting search parameter
+    url.pathname.startsWith("/app/dist/") &&
+    url.pathname.match(/.*\..*/) &&
+    url.search.match(/.*[0-9a-f]{20}.*/) &&
     ["image", "script", "style", "font"].includes(request.destination) &&
     sameOrigin
   );
@@ -33,4 +36,13 @@ registerRoute(
   "DELETE",
 );
 
-addEventListener("install", () => self.skipWaiting());
+setDefaultHandler(new NetworkFirst());
+
+self.addEventListener("activate", function (event) {
+  console.info("%cSERVICE WORKER: activate", "background: purple");
+});
+
+self.addEventListener("install", () => {
+  console.info("%cSERVICE WORKER: install", "background: orange");
+  self.skipWaiting();
+});
