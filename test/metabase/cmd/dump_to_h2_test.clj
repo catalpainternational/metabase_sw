@@ -71,14 +71,14 @@
                           h2-file-enc         (format "out-%s.db" (mt/random-name))
                           h2-file-default-enc (format "out-%s.db" (mt/random-name))]
         (mt/test-drivers #{:h2 :postgres :mysql}
-          (with-redefs [i18n.impl/site-locale-from-setting-fn (atom (constantly false))]
+          (with-redefs [i18n.impl/site-locale-from-setting (constantly nil)]
             (binding [setting/*disable-cache*         true
                       mdb.connection/*application-db* (mdb.connection/application-db
                                                        driver/*driver*
                                                        (persistent-data-source driver/*driver* db-name))]
               (when-not (= driver/*driver* :h2)
                 (tx/create-db! driver/*driver* {:database-name db-name}))
-              (binding [copy/*allow-loading-h2-databases* true]
+              (binding [copy/*copy-h2-database-details* true]
                 (load-from-h2/load-from-h2! h2-fixture-db-file)
                 (encryption-test/with-secret-key "89ulvIGoiYw6mNELuOoEZphQafnF/zYe+3vT+v70D1A="
                   (t2/insert! Setting {:key "my-site-admin", :value "baz"})

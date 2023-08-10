@@ -37,7 +37,7 @@ import { DashboardCard } from "./DashboardGrid.styled";
 import GridLayout from "./grid/GridLayout";
 import { generateMobileLayout } from "./grid/utils";
 
-import AddSeriesModal from "./AddSeriesModal/AddSeriesModal";
+import { AddSeriesModal } from "./AddSeriesModal";
 import DashCard from "./DashCard";
 
 const mapDispatchToProps = { addUndo };
@@ -297,6 +297,7 @@ class DashboardGrid extends Component {
   onDashCardRemove(dc) {
     this.props.removeCardFromDashboard({
       dashcardId: dc.id,
+      cardId: dc.card_id,
     });
     this.props.addUndo({
       message: t`Removed card`,

@@ -39,10 +39,10 @@
                                (mdb.spec/spec driver/*driver* details))))]
           (binding [setting/*disable-cache*         true
                     mdb.connection/*application-db* (mdb.connection/application-db driver/*driver* data-source)]
-            (with-redefs [i18n.impl/site-locale-from-setting-fn (atom (constantly false))]
+            (with-redefs [i18n.impl/site-locale-from-setting (constantly nil)]
               (when-not (= driver/*driver* :h2)
                 (tx/create-db! driver/*driver* {:database-name db-name}))
-              (binding [copy/*allow-loading-h2-databases* true]
+              (binding [copy/*copy-h2-database-details* true]
                 (load-from-h2/load-from-h2! h2-fixture-db-file)
                 (dump-to-h2/dump-to-h2! h2-file))
               (is (not (compare-h2-dbs/different-contents?
