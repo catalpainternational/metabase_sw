@@ -21,6 +21,25 @@ workbox.routing.registerRoute(({ url, request, sameOrigin }) => {
 }, new workbox.strategies.StaleWhileRevalidate());
 
 workbox.routing.registerRoute(
+  ({ url }) => url.pathname.startsWith("/api/embed/dashboard/"),
+  new workbox.strategies.NetworkFirst({
+    cacheName: "embedded-dashboard-cache",
+    plugins: [
+      new workbox.cacheableResponse.CacheableResponsePlugin({
+        statuses: [200, 202],
+      }),
+      new workbox.expiration.ExpirationPlugin({
+        maxAgeSeconds: 365 * 24 * 60 * 60,
+      }),
+    ],
+    cacheKeyWillBeUsed: async ({ request }) => {
+      const fullUrl = request.url;
+      const cacheKey = new URL(fullUrl).pathname;
+      return cacheKey;
+    },
+  }),
+);
+workbox.routing.registerRoute(
   ({ url }) => url.pathname.startsWith("/api/"),
   new workbox.strategies.NetworkOnly(),
   "POST",
