@@ -2,7 +2,7 @@
   "Functions for sending Snowplow analytics events"
   (:require
    [clojure.string :as str]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
    [metabase.config :as config]
    [metabase.models.setting :as setting :refer [defsetting Setting]]
@@ -140,7 +140,7 @@
    ::csvupload    "1-0-0"
    ::dashboard    "1-1-0"
    ::database     "1-0-0"
-   ::instance     "1-1-1"
+   ::instance     "1-1-2"
    ::metabot      "1-0-1"
    ::search       "1-0-0"
    ::model        "1-0-0"

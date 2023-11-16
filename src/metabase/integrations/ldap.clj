@@ -2,8 +2,8 @@
   (:require
    [cheshire.core :as json]
    [clj-ldap.client :as ldap]
+   [metabase.config :as config]
    [metabase.integrations.ldap.default-implementation :as default-impl]
-   [metabase.integrations.ldap.interface :as i]
    [metabase.models.interface :as mi]
    [metabase.models.setting :as setting :refer [defsetting]]
    [metabase.models.user :refer [User]]
@@ -19,7 +19,8 @@
 
 ;; Load the EE namespace up front so that the extra Settings it defines are available immediately.
 ;; Otherwise, this would only happen the first time `find-user` or `fetch-or-create-user!` is called.
-(u/ignore-exceptions (classloader/require ['metabase-enterprise.enhancements.integrations.ldap]))
+(when config/ee-available?
+  (classloader/require 'metabase-enterprise.enhancements.integrations.ldap))
 
 (defsetting ldap-host
   (deferred-tru "Server hostname."))
@@ -91,8 +92,8 @@
 
                (map? new-value)
                (do (doseq [k (keys new-value)]
-                     (when-not (DN/isValidDN (name k))
-                       (throw (IllegalArgumentException. (tru "{0} is not a valid DN." (name k))))))
+                     (when-not (DN/isValidDN (u/qualified-name k))
+                       (throw (IllegalArgumentException. (tru "{0} is not a valid DN." (u/qualified-name k))))))
                    (setting/set-value-of-type! :json :ldap-group-mappings new-value)))))
 
 (defsetting ldap-configured?
@@ -199,7 +200,7 @@
   "Tests the connection to an LDAP server using the currently set settings."
   []
   (let [settings (into {} (for [[k v] mb-settings->ldap-details]
-                             [v (setting/get k)]))]
+                            [v (setting/get k)]))]
     (test-ldap-connection settings)))
 
 (defn verify-password
@@ -224,7 +225,7 @@
    :group-base           (ldap-group-base)
    :group-mappings       (ldap-group-mappings)})
 
-(s/defn find-user :- (s/maybe i/UserInfo)
+(s/defn find-user :- (s/maybe default-impl/UserInfo)
   "Get user information for the supplied username."
   ([username :- su/NonBlankString]
    (with-ldap-connection [conn]
@@ -235,5 +236,5 @@
 
 (s/defn fetch-or-create-user! :- (mi/InstanceOf User)
   "Using the `user-info` (from [[find-user]]) get the corresponding Metabase user, creating it if necessary."
-  [user-info :- i/UserInfo]
+  [user-info :- default-impl/UserInfo]
   (default-impl/fetch-or-create-user! user-info (ldap-settings)))

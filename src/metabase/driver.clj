@@ -7,11 +7,13 @@
   these drivers define additional multimethods that child drivers should implement; see [[metabase.driver.sql]] and
   [[metabase.driver.sql-jdbc]] for more details."
   (:require
+   [clojure.set :as set]
    [clojure.string :as str]
-   [java-time :as t]
+   [java-time.api :as t]
    [metabase.driver.impl :as driver.impl]
    [metabase.models.setting :as setting :refer [defsetting]]
    [metabase.plugins.classloader :as classloader]
+   [metabase.util :as u]
    [metabase.util.i18n :refer [deferred-tru trs tru]]
    [metabase.util.log :as log]
    [potemkin :as p]
@@ -259,6 +261,20 @@
   [_]
   nil)
 
+(defn dispatch-on-initialized-driver-safe-keys
+  "Dispatch on initialized driver, except checks for `classname`,
+  `subprotocol`, `connection-uri` in the details map in order to
+  prevent a mismatch in spec type vs driver."
+  [driver details-map]
+  (let [invalid-keys #{"classname" "subprotocol" "connection-uri"}
+        ks           (->> details-map keys
+                          (map name)
+                          (map u/lower-case-en) set)]
+    (when (seq (set/intersection ks invalid-keys))
+      (throw (ex-info "Cannot specify subname, protocol, or connection-uri in details map"
+                      {:invalid-keys (set/intersection ks invalid-keys)})))
+    (dispatch-on-initialized-driver driver)))
+
 (defmulti can-connect?
   "Check whether we can connect to a `Database` with `details-map` and perform a simple query. For example, a SQL
   database might try running a query like `SELECT 1;`. This function should return truthy if a connection to the DB
@@ -266,7 +282,7 @@
   connection cannot be made. Throw an `ex-info` containing a truthy `::can-connect-message?` in `ex-data`
   in order to suppress logging expected driver validation messages during setup."
   {:arglists '([driver details])}
-  dispatch-on-initialized-driver
+  dispatch-on-initialized-driver-safe-keys
   :hierarchy #'hierarchy)
 
 (defmulti dbms-version
@@ -506,8 +522,13 @@
     :test/jvm-timezone-setting
 
     ;; Does the driver support connection impersonation (i.e. overriding the role used for individual queries)?
-    :connection-impersonation})
+    :connection-impersonation
 
+    ;; Does the driver require specifying the default connection role for connection impersonation to work?
+    :connection-impersonation-requires-role
+
+    ;; Does the driver require specifying a collection (table) for native queries? (mongo)
+    :native-requires-specified-collection})
 
 (defmulti supports?
   "Does this driver support a certain `feature`? (A feature is a keyword, and can be any of the ones listed above in
@@ -615,6 +636,30 @@
   {:arglists '([driver query]), :style/indent 1}
   dispatch-on-initialized-driver
   :hierarchy #'hierarchy)
+
+(defmulti prettify-native-form
+  "Pretty-format native form presumably coming from compiled query.
+  Used eg. in the API endpoint `/dataset/native`, to present the user with a nicely formatted query.
+
+  # How to use and extend this method?
+
+  At the time of writing, this method acts as identity for nosql drivers. However, story with sql drivers is a bit
+  different. To extend it for sql drivers, developers could use [[metabase.driver.sql.util/format-sql]]. Function
+  in question is implemented in a way, that developers, implemnting this multimethod can:
+  - Avoid implementing it completely, if their driver keyword representation corresponds to key in
+    [[metabase.driver.sql.util/dialects]] (eg. `:postgres`).
+  - Ignore implementing it, if it is sufficient to format their drivers native form with dialect corresponding
+    to `:standardsql`'s value from the dialects map (eg `:h2`).
+  - Use [[metabase.driver.sql.util/format-sql]] in this method's implementation, providing dialect keyword
+    representation that corresponds to to their driver's formatting (eg. `:sqlserver` uses `:tsql`).
+  - Completly reimplement this method with their special formatting code."
+  {:added "0.47.0", :arglists '([driver native-form]), :style/indent 1}
+  dispatch-on-initialized-driver
+  :hierarchy #'hierarchy)
+
+(defmethod prettify-native-form ::driver
+ [_ native-form]
+ native-form)
 
 (defmulti splice-parameters-into-native-query
   "For a native query that has separate parameters, such as a JDBC prepared statement, e.g.

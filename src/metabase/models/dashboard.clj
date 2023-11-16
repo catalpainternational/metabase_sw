@@ -127,9 +127,24 @@
   [dashboard]
   (update-dashboard-subscription-pulses! dashboard))
 
+(defn- migrate-parameters-list
+  "Update the `:parameters` list of a dashboard from legacy formats."
+  [dashboard]
+  (cond-> dashboard
+    (:parameters dashboard)
+    (update :parameters (fn [params]
+                          (for [p params]
+                            (cond-> p
+                              ;; It was previously possible for parameters to have empty strings for :name and
+                              ;; :slug, but these are now required to be non-blank strings.
+                              (or (= (:name p) "")
+                                  (= (:slug p) ""))
+                              (assoc :name "unnamed" :slug "unnamed")))))))
+
 (t2/define-after-select :model/Dashboard
   [dashboard]
   (-> dashboard
+      migrate-parameters-list
       public-settings/remove-public-uuid-if-public-sharing-is-disabled))
 
 (defmethod serdes/hash-fields :model/Dashboard
@@ -216,16 +231,27 @@
       (doseq [update-card to-update]
         (dashboard-card/update-dashboard-card! update-card (id->current-card (:id update-card)))))))
 
+(defn- remove-invalid-dashcards
+  "Given a list of dashcards, remove any dashcard that references cards that are either archived or not exist."
+  [dashcards]
+  (let [card-ids          (set (keep :card_id dashcards))
+        active-card-ids   (when-let [card-ids (seq card-ids)]
+                            (t2/select-pks-set :model/Card :id [:in card-ids] :archived false))
+        inactive-card-ids (set/difference card-ids active-card-ids)]
+   (remove #(contains? inactive-card-ids (:card_id %)) dashcards)))
+
 (defmethod revision/revert-to-revision! :model/Dashboard
   [_model dashboard-id _user-id serialized-dashboard]
   ;; Update the dashboard description / name / permissions
   (t2/update! :model/Dashboard dashboard-id (dissoc serialized-dashboard :cards :tabs))
   ;; Now update the tabs and cards as needed
-  (let [serialized-cards          (:cards serialized-dashboard)
+  (let [serialized-dashcards      (:cards serialized-dashboard)
         current-tabs              (t2/select-fn-vec #(dissoc (t2.realize/realize %) :created_at :updated_at :entity_id :dashboard_id)
                                                     :model/DashboardTab :dashboard_id dashboard-id)
         {:keys [old->new-tab-id]} (dashboard-tab/do-update-tabs! dashboard-id current-tabs (:tabs serialized-dashboard))
-        serialized-cards          (cond->> serialized-cards
+        serialized-dashcards      (cond->> serialized-dashcards
+                                    true
+                                    remove-invalid-dashcards
                                     ;; in case reverting result in new tabs being created,
                                     ;; we need to remap the tab-id
                                     (seq old->new-tab-id)
@@ -233,7 +259,7 @@
                                            (if-let [new-tab-id (get old->new-tab-id (:dashboard_tab_id card))]
                                              (assoc card :dashboard_tab_id new-tab-id)
                                              card))))]
-    (revert-dashcards dashboard-id serialized-cards))
+    (revert-dashcards dashboard-id serialized-dashcards))
   serialized-dashboard)
 
 (defmethod revision/diff-strings :model/Dashboard
@@ -569,21 +595,35 @@
          :serdes/meta  [{:model "Dashboard"    :id (:entity_id dashboard)}
                         {:model "DashboardTab" :id (:entity_id tab)}]))
 
+(defn- drop-excessive-nested!
+  "Remove nested entities which are not present in incoming serialization load"
+  [hydration-key ingested local]
+  (let [local-nested    (get (t2/hydrate local hydration-key) hydration-key)
+        ingested-nested (get ingested hydration-key)
+        to-remove       (set/difference (set (map :entity_id local-nested))
+                                        (set (map :entity_id ingested-nested)))
+        model           (t2/model (first local-nested))]
+    (when (seq to-remove)
+      (t2/delete! model :entity_id [:in to-remove]))))
+
 ;; Call the default load-one! for the Dashboard, then for each DashboardCard.
 (defmethod serdes/load-one! "Dashboard" [ingested maybe-local]
   (let [dashboard ((get-method serdes/load-one! :default) (dissoc ingested :ordered_cards :ordered_tabs) maybe-local)]
+    (drop-excessive-nested! :ordered_tabs ingested dashboard)
     (doseq [tab (:ordered_tabs ingested)]
       (serdes/load-one! (dashtab-for tab dashboard)
                         (t2/select-one :model/DashboardTab :entity_id (:entity_id tab))))
+    (drop-excessive-nested! :ordered_cards ingested dashboard)
     (doseq [dashcard (:ordered_cards ingested)]
       (serdes/load-one! (dashcard-for dashcard dashboard)
-                        (t2/select-one 'DashboardCard :entity_id (:entity_id dashcard))))))
+                        (t2/select-one :model/DashboardCard :entity_id (:entity_id dashcard))))))
 
 (defn- serdes-deps-dashcard
-  [{:keys [card_id parameter_mappings visualization_settings]}]
+  [{:keys [action_id card_id parameter_mappings visualization_settings]}]
   (->> (mapcat serdes/mbql-deps parameter_mappings)
        (concat (serdes/visualization-settings-deps visualization_settings))
-       (concat (when card_id #{[{:model "Card" :id card_id}]}))
+       (concat (when card_id   #{[{:model "Card"   :id card_id}]}))
+       (concat (when action_id #{[{:model "Action" :id action_id}]}))
        set))
 
 (defmethod serdes/dependencies "Dashboard"

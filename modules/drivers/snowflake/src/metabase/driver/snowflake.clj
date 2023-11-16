@@ -4,7 +4,7 @@
    [clojure.java.jdbc :as jdbc]
    [clojure.set :as set]
    [clojure.string :as str]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
    [metabase.driver :as driver]
    [metabase.driver.common :as driver.common]
@@ -42,10 +42,11 @@
 
 (driver/register! :snowflake, :parent #{:sql-jdbc ::sql-jdbc.legacy/use-legacy-classes-for-read-and-set})
 
-(doseq [[feature supported?] {:datetime-diff            true
-                              :now                      true
-                              :convert-timezone         true
-                              :connection-impersonation true}]
+(doseq [[feature supported?] {:datetime-diff                          true
+                              :now                                    true
+                              :convert-timezone                       true
+                              :connection-impersonation               true
+                              :connection-impersonation-requires-role true}]
   (defmethod driver/database-supports? [:snowflake feature] [_driver _feature _db] supported?))
 
 (defmethod driver/humanize-connection-error-message :snowflake
@@ -452,11 +453,11 @@
 (defmethod sql-jdbc.describe-table/get-table-pks :snowflake
   [_driver ^Connection conn db-name-or-nil table]
   (let [^DatabaseMetaData metadata (.getMetaData conn)]
-    (into #{} (sql-jdbc.sync.common/reducible-results
-               #(.getPrimaryKeys metadata db-name-or-nil
-                                 (-> table :schema escape-name-for-metadata)
-                                 (-> table :name escape-name-for-metadata))
-               (fn [^ResultSet rs] #(.getString rs "COLUMN_NAME"))))))
+    (into [] (sql-jdbc.sync.common/reducible-results
+              #(.getPrimaryKeys metadata db-name-or-nil
+                                (-> table :schema escape-name-for-metadata)
+                                (-> table :name escape-name-for-metadata))
+              (fn [^ResultSet rs] #(.getString rs "COLUMN_NAME"))))))
 
 (defn- describe-table-fks*
   "Stolen from [[sql-jdbc.describe-table]].
@@ -584,10 +585,12 @@
 
 (defmethod driver.sql/set-role-statement :snowflake
   [_ role]
-  (format "USE ROLE %s;" role))
+  (let [special-chars-pattern #"[^a-zA-Z0-9_]"
+        needs-quote           (re-find special-chars-pattern role)]
+    (if needs-quote
+      (format "USE ROLE \"%s\";" role)
+      (format "USE ROLE %s;" role))))
 
 (defmethod driver.sql/default-database-role :snowflake
   [_ database]
-  (or
-   (-> database :details :role)
-   "ACCOUNTADMIN"))
+  (-> database :details :role))

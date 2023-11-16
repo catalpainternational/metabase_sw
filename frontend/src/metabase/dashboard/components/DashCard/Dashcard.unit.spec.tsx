@@ -1,4 +1,4 @@
-import { renderWithProviders, screen } from "__support__/ui";
+import { queryIcon, renderWithProviders, screen } from "__support__/ui";
 
 import {
   createMockCard,
@@ -8,7 +8,6 @@ import {
   createMockDatasetData,
   createMockTextDashboardCard,
   createMockHeadingDashboardCard,
-  createMockParameter,
   createMockLinkDashboardCard,
 } from "metabase-types/api/mocks";
 import { createMockMetadata } from "__support__/metadata";
@@ -78,6 +77,12 @@ describe("DashCard", () => {
     expect(screen.getByText("My Card")).toBeVisible();
   });
 
+  it("should not display the ellipsis menu for (unsaved) xray dashboards (metabase#33637)", async () => {
+    setup({ isXray: true });
+
+    expect(queryIcon("ellipsis")).not.toBeInTheDocument();
+  });
+
   it("shows a table visualization", () => {
     setup();
     expect(screen.getByText("My Card")).toBeVisible();
@@ -116,28 +121,6 @@ describe("DashCard", () => {
       dashcardData: {},
     });
     expect(screen.getByText("What a cool section")).toBeVisible();
-  });
-
-  it("in parameter editing mode, shows faded heading text", () => {
-    const textCard = createMockHeadingDashboardCard({
-      text: "What a cool section",
-    });
-    const board = {
-      ...dashboard,
-      ordered_cards: [textCard],
-      parameters: [createMockParameter()],
-    };
-    setup({
-      dashboard: board,
-      dashcard: textCard,
-      dashcardData: {},
-      isEditing: true,
-      isEditingParameter: true,
-    });
-    expect(screen.getByText("What a cool section")).toBeVisible();
-    expect(screen.getByText("What a cool section")).toHaveStyle({
-      opacity: 0.25,
-    });
   });
 
   it("shows a link visualization", () => {

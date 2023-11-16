@@ -637,6 +637,61 @@
      (testing "there are no \"Tab 3\""
        (is (false? (t2/exists? :model/DashboardTab :dashboard_id dashboard-id :name "Tab 3")))))))
 
+(deftest revert-dashboard-skip-archived-or-deleted-card-test
+  (t2.with-temp/with-temp [:model/Dashboard {dashboard-id :id}          {:name "A dashboard"}
+                           :model/Card      {will-be-archived-card :id} {}
+                           :model/Card      {will-be-deleted-card :id}  {}
+                           :model/Card      {unchanged-card       :id}  {}]
+    ;; 0. create a dashboard
+    (create-dashboard-revision! dashboard-id true)
+    ;; 1. add 3 cards and 1 text card
+    (t2/insert! :model/DashboardCard
+                [{:dashboard_id     dashboard-id
+                  :dashboard_tab_id nil
+                  :card_id          will-be-archived-card
+                  :row              0
+                  :col              0
+                  :size_x           4
+                  :size_y           4}
+                 {:dashboard_id     dashboard-id
+                  :dashboard_tab_id nil
+                  :card_id          will-be-deleted-card
+                  :row              4
+                  :col              4
+                  :size_x           4
+                  :size_y           4}
+                 {:dashboard_id     dashboard-id
+                  :dashboard_tab_id nil
+                  :card_id          unchanged-card
+                  :row              0
+                  :col              0
+                  :size_x           4
+                  :size_y           4}
+                 {:dashboard_id           dashboard-id
+                  :dashboard_tab_id       nil
+                  :row                    4
+                  :col                    4
+                  :size_x                 4
+                  :size_y                 4
+                  :visualization_settings {:text "Metabase"}}])
+    (create-dashboard-revision! dashboard-id false)
+
+    ;; 2. delete all the dashcards
+    (t2/delete! :model/DashboardCard :dashboard_id dashboard-id)
+    (create-dashboard-revision! dashboard-id false)
+
+    (t2/delete! :model/Card will-be-deleted-card)
+    (t2/update! :model/Card :id will-be-archived-card {:archived true})
+
+    (testing "revert should not include archived or deleted card ids (#34884)"
+      (revert-to-previous-revision Dashboard dashboard-id 2)
+      (is (=? #{{:card_id                unchanged-card
+                 :visualization_settings {}}
+                {:card_id                nil
+                 :visualization_settings {:text "Metabase"}}}
+              (t2/select-fn-set #(select-keys % [:card_id :visualization_settings])
+                                :model/DashboardCard :dashboard_id dashboard-id))))))
+
 (deftest public-sharing-test
   (testing "test that a Dashboard's :public_uuid comes back if public sharing is enabled..."
     (tu/with-temporary-setting-values [enable-public-sharing true]
@@ -649,6 +704,17 @@
         (t2.with-temp/with-temp [Dashboard dashboard {:public_uuid (str (java.util.UUID/randomUUID))}]
           (is (= nil
                  (:public_uuid dashboard))))))))
+
+(deftest migrate-parameters-list-test
+  (testing "test that a Dashboard's :parameters is selected with a non-nil name and slug"
+    (doseq [[name slug] [["" ""] ["" "slug"] ["name" ""]]]
+      (t2.with-temp/with-temp [:model/Dashboard dashboard {:parameters [{:id   "_CATEGORY_NAME_"
+                                                                         :type "category"
+                                                                         :name name
+                                                                         :slug slug}]}]
+        (is (=? {:name "unnamed"
+                 :slug "unnamed"}
+                (first (:parameters dashboard))))))))
 
 (deftest post-update-test
   (t2.with-temp/with-temp [Collection    {collection-id-1 :id} {}

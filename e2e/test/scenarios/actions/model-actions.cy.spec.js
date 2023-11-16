@@ -6,8 +6,6 @@ import {
   restore,
   fillActionQuery,
   createAction,
-  navigationSidebar,
-  openNavigationSidebar,
   resetTestTable,
   resyncDatabase,
   createModelFromTableName,
@@ -103,6 +101,7 @@ describe(
 
       cy.intercept("GET", "/api/card/*").as("getModel");
       cy.intercept("PUT", "/api/action/*").as("updateAction");
+      cy.intercept("POST", "/api/action").as("createAction");
     });
 
     it("should allow CRUD operations on model actions", () => {
@@ -111,10 +110,11 @@ describe(
         cy.wait("@getModel");
       });
 
-      // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
-      cy.findByText("Actions").click();
+      cy.findByRole("tablist").within(() => {
+        cy.findByText("Actions").click();
+      });
 
-      cy.findByRole("button", { name: /Create basic actions/i }).click();
+      createBasicActions();
       cy.findByLabelText("Action list").within(() => {
         cy.get("li").eq(0).findByText("Create").should("be.visible");
         cy.get("li").eq(1).findByText("Update").should("be.visible");
@@ -174,32 +174,34 @@ describe(
           cy.findByText("Delete").should("not.exist");
         });
 
-      openNavigationSidebar();
-      navigationSidebar().within(() => {
-        cy.icon("ellipsis").click();
-      });
-      popover().findByText("View archive").click();
+      cy.log("Go to the archive");
+      cy.visit("/archive");
 
-      getArchiveListItem("Delete Order").within(() => {
-        cy.icon("unarchive").click({ force: true });
-      });
+      getArchiveListItem("Delete Order")
+        .icon("unarchive")
+        .click({ force: true });
 
       cy.get("main").within(() => {
-        cy.findByText("Delete Order");
+        cy.findByText("Items you archive will appear here.");
+        cy.findByText("Delete Order").should("not.exist");
       });
 
-      cy.findByRole("button", { name: "Undo" }).click();
+      cy.findByTestId("toast-undo").button("Undo").click();
 
       cy.get("main").within(() => {
+        cy.findByText("Items you archive will appear here.").should(
+          "not.exist",
+        );
         cy.findByText("Delete Order").should("be.visible");
       });
 
-      getArchiveListItem("Delete Order").within(() => {
-        cy.icon("trash").click({ force: true });
-      });
+      cy.log("Delete the action");
+      getArchiveListItem("Delete Order").icon("trash").click({ force: true });
 
-      cy.findByTestId("Delete Order").should("not.exist");
-      cy.findByRole("button", { name: "Undo" }).should("not.exist");
+      cy.get("main").within(() => {
+        cy.findByText("Items you archive will appear here.");
+        cy.findByText("Delete Order").should("not.exist");
+      });
     });
 
     it("should allow to create an action with the New button", () => {
@@ -333,6 +335,16 @@ describe(
   describe(`Write actions on model detail page (${dialect})`, () => {
     beforeEach(() => {
       cy.intercept("GET", "/api/card/*").as("getModel");
+      cy.intercept("GET", "/api/action/*").as("getAction");
+
+      cy.intercept("PUT", "/api/action/*").as("updateAction");
+      cy.intercept("POST", "/api/action").as("createAction");
+      cy.intercept("POST", "/api/action/*/public_link").as(
+        "enableActionSharing",
+      );
+      cy.intercept("DELETE", "/api/action/*/public_link").as(
+        "disableActionSharing",
+      );
 
       resetTestTable({ type: dialect, table: WRITABLE_TEST_TABLE });
       restore(`${dialect}-writable`);
@@ -591,9 +603,15 @@ describe(
         cy.findByText("Actions").click();
       });
 
-      cy.findByRole("button", { name: /Create basic actions/i }).click();
+      createBasicActions();
 
       openActionEditorFor("Create");
+
+      cy.wait("@getAction").then(({ response }) => {
+        const { parameters, visualization_settings } = response.body;
+        expect(parameters).to.have.length(5);
+        expect(visualization_settings).to.have.property("fields");
+      });
 
       cy.findAllByTestId("form-field-container")
         .filter(":contains('Created At')")
@@ -699,7 +717,7 @@ describe(
         cy.findByText("Actions").click();
       });
 
-      cy.findByRole("button", { name: /Create basic actions/i }).click();
+      createBasicActions();
 
       enableSharingFor("Update", { publicUrlAlias: "updatePublicURL" });
 
@@ -713,6 +731,8 @@ describe(
         });
 
       cy.findByRole("button", { name: "Update" }).click();
+
+      cy.wait("@updateAction");
 
       cy.signOut();
 
@@ -847,6 +867,7 @@ function enableSharingFor(actionName, { publicUrlAlias }) {
   cy.findByRole("dialog").within(() => {
     cy.button("Action settings").click();
     cy.findByLabelText("Make public").should("not.be.checked").click();
+    cy.wait("@enableActionSharing");
     cy.findByLabelText("Public action form URL")
       .invoke("val")
       .then(url => {
@@ -866,6 +887,7 @@ function disableSharingFor(actionName) {
     cy.findByText("Disable this public link?").should("be.visible");
     cy.findByRole("button", { name: "Yes" }).click();
   });
+  cy.wait("@disableActionSharing");
   cy.findByRole("dialog").within(() => {
     cy.button("Cancel").click();
   });
@@ -895,4 +917,10 @@ function verifyScoreValue(value, dialect) {
 
     expect(row.score).to.equal(value);
   });
+}
+
+function createBasicActions() {
+  cy.findByRole("button", { name: /Create basic actions/i }).click();
+
+  cy.wait(["@createAction", "@createAction", "@createAction"]);
 }

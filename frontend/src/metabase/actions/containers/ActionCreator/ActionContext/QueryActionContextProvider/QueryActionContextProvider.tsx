@@ -72,6 +72,7 @@ function convertActionToQuestionCard(
     result_metadata: [],
     cache_ttl: null,
     last_query_start: null,
+    average_query_time: null,
     archived: false,
   };
 }
@@ -101,7 +102,7 @@ function convertQuestionToAction(
     id: question.id(),
     name: question.displayName() as string,
     description: question.description(),
-    dataset_query: question.datasetQuery() as NativeDatasetQuery,
+    dataset_query: cleanQuestion.datasetQuery() as NativeDatasetQuery,
     database_id: question.databaseId() as DatabaseId,
     parameters: parameters as WritebackParameter[],
     visualization_settings: formSettings,

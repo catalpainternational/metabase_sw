@@ -78,9 +78,9 @@ class Database {
         set.has("inner-join") ||
         set.has("full-join")
       );
-    } else {
-      return set.has(feature);
     }
+
+    return set.has(feature);
   }
 
   supportsPivots() {
@@ -93,6 +93,10 @@ class Database {
 
   canWrite() {
     return this.native_permissions === "write";
+  }
+
+  canUpload() {
+    return this.can_upload;
   }
 
   isPersisted() {

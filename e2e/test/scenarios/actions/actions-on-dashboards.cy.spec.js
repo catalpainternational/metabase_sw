@@ -1,5 +1,4 @@
 import { assocIn } from "icepick";
-import _ from "underscore";
 import {
   restore,
   queryWritableDB,
@@ -916,20 +915,28 @@ const MODEL_NAME = "Test Action Model";
           });
 
           actionEditorModal().within(() => {
-            cy.findByTestId("native-query-editor").click();
-
-            cy.get(".ace_content").type(
-              _.times(23, () => "{leftArrow}")
-                .join("")
-                .concat("{backspace}{backspace}"),
-            );
-            cy.get(".ace_text-input").type(`{{ score }}`, {
-              force: true,
+            cy.get(".ace_content").click().type("{home}{shift+end}{backspace}");
+            const TEST_COLUMNS_QUERY = `UPDATE ${TEST_COLUMNS_TABLE} SET timestamp = {{ Timestamp }} WHERE id = {{ ID }}`;
+            cy.get(".ace_content").type(TEST_COLUMNS_QUERY, {
+              delay: 0,
               parseSpecialCharSequences: false,
             });
 
             cy.findByTestId("action-form-editor").within(() => {
-              cy.findAllByText("Number").click({ multiple: true });
+              cy.contains("ID")
+                .closest('[data-testid="form-field-container"]')
+                .within(() => {
+                  cy.findByRole("radiogroup", { name: "Field type" })
+                    .findByText("Number")
+                    .click();
+                });
+              cy.contains("Timestamp")
+                .closest('[data-testid="form-field-container"]')
+                .within(() => {
+                  cy.findByRole("radiogroup", { name: "Field type" })
+                    .findByText("Date")
+                    .click();
+                });
             });
           });
 
@@ -938,8 +945,8 @@ const MODEL_NAME = "Test Action Model";
           });
 
           getActionParametersInputModal().within(() => {
-            cy.findByLabelText("Total").type(`123`);
-            cy.findByLabelText("Score").type(`345`);
+            cy.findByLabelText("Timestamp").type(`2020-01-01`);
+            cy.findByLabelText("ID").type(`1`);
 
             cy.button(SAMPLE_QUERY_ACTION.name).click();
           });
@@ -949,11 +956,13 @@ const MODEL_NAME = "Test Action Model";
               Object.values(interception.request.body.parameters)
                 .sort()
                 .join(","),
-            ).to.equal("123,345");
+            ).to.equal("1,2020-01-01");
           });
 
           cy.findByTestId("toast-undo").within(() => {
-            cy.findByText(`Success! The action returned: {"rows-affected":0}`);
+            cy.findByText(
+              `${SAMPLE_WRITABLE_QUERY_ACTION.name} ran successfully`,
+            ).should("be.visible");
           });
         });
       });
@@ -1033,7 +1042,7 @@ describe(
           cy.button("Pick an action").click();
         });
 
-        cy.wait("@getActions");
+        waitForValidActions();
 
         cy.findByRole("dialog").within(() => {
           cy.findByText(MODEL_NAME).click();
@@ -1095,7 +1104,7 @@ function createDashboardWithActionButton({
     cy.button("Pick an action").click();
   });
 
-  cy.wait("@getActions");
+  waitForValidActions();
 
   cy.findByRole("dialog").within(() => {
     cy.findByText(modelName).click();
@@ -1181,4 +1190,14 @@ function actionEditorModal() {
 
 function getActionParametersInputModal() {
   return cy.findByTestId("action-parameters-input-modal");
+}
+
+function waitForValidActions() {
+  cy.wait("@getActions").then(({ response }) => {
+    const { body: actions } = response;
+
+    actions.forEach(action => {
+      expect(action.parameters).to.have.length.gt(0);
+    });
+  });
 }

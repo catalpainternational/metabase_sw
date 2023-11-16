@@ -4,7 +4,7 @@
    [clj-http.client :as http]
    [clojure.core.memoize :as memoize]
    [clojure.string :as str]
-   [java-time :as t]
+   [java-time.api :as t]
    [metabase.api.common :as api]
    [metabase.config :as config]
    [metabase.models.database :refer [Database]]
@@ -201,6 +201,10 @@
     (application-name-for-setting-descriptions))
   :default    "en"
   :visibility :public
+  :getter     (fn []
+                (let [value (setting/get-value-of-type :string :site-locale)]
+                  (when (i18n/available-locale? value)
+                    value)))
   :setter     (fn [new-value]
                 (when new-value
                   (when-not (i18n/available-locale? new-value)
@@ -258,6 +262,7 @@
 (defsetting embedding-app-origin
   (deferred-tru "Allow this origin to embed the full {0} application"
                 (application-name-for-setting-descriptions))
+  :feature    :embedding
   :visibility :public)
 
 (defsetting enable-nested-queries
@@ -276,7 +281,7 @@
   (deferred-tru "Allow persisting models into the source database.")
   :type       :boolean
   :default    false
-  :visibility :authenticated)
+  :visibility :public)
 
 (defsetting persisted-model-refresh-cron-schedule
   (deferred-tru "cron syntax string to schedule refreshing persisted models.")
@@ -420,6 +425,7 @@
   :visibility :public
   :type       :boolean
   :default    true
+  :feature    :disable-password-login
   :getter     (fn []
                 ;; if `:enable-password-login` has an *explict* (non-default) value, and SSO is configured, use that;
                 ;; otherwise this always returns true.
@@ -546,18 +552,26 @@
   "Features registered for this instance's token"
   :visibility :public
   :setter     :none
-  :getter     (fn [] {:embedding              (premium-features/hide-embed-branding?)
-                      :whitelabel             (premium-features/enable-whitelabeling?)
-                      :audit_app              (premium-features/enable-audit-app?)
-                      :sandboxes              (premium-features/enable-sandboxes?)
-                      :sso                    (premium-features/enable-sso?)
-                      :advanced_config        (premium-features/enable-advanced-config?)
-                      :advanced_permissions   (premium-features/enable-advanced-permissions?)
-                      :content_management     (premium-features/enable-content-management?)
-                      :hosting                (premium-features/is-hosted?)
-                      :official_collections   (premium-features/enable-official-collections?)
-                      :snippet_collections    (premium-features/enable-snippet-collections?)
-                      :disable_password_login (premium-features/can-disable-password-login?)})
+  :getter     (fn [] {:advanced_permissions           (premium-features/enable-advanced-permissions?)
+                      :audit_app                      (premium-features/enable-audit-app?)
+                      :cache_granular_controls        (premium-features/enable-cache-granular-controls?)
+                      :config_text_file               (premium-features/enable-config-text-file?)
+                      :content_verification           (premium-features/enable-content-verification?)
+                      :dashboard_subscription_filters (premium-features/enable-dashboard-subscription-filters?)
+                      :disable_password_login         (premium-features/can-disable-password-login?)
+                      :email_allow_list               (premium-features/enable-email-allow-list?)
+                      :email_restrict_recipients      (premium-features/enable-email-restrict-recipients?)
+                      :embedding                      (premium-features/hide-embed-branding?)
+                      :hosting                        (premium-features/is-hosted?)
+                      :official_collections           (premium-features/enable-official-collections?)
+                      :sandboxes                      (premium-features/enable-sandboxes?)
+                      :session_timeout_config         (premium-features/enable-session-timeout-config?)
+                      :snippet_collections            (premium-features/enable-snippet-collections?)
+                      :sso_google                     (premium-features/enable-sso-google?)
+                      :sso_jwt                        (premium-features/enable-sso-jwt?)
+                      :sso_ldap                       (premium-features/enable-sso-ldap?)
+                      :sso_saml                       (premium-features/enable-sso-saml?)
+                      :whitelabel                     (premium-features/enable-whitelabeling?)})
   :doc        false)
 
 (defsetting redirect-all-requests-to-https

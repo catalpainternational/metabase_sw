@@ -2,14 +2,18 @@ import styled from "@emotion/styled";
 import { Icon } from "metabase/core/components/Icon";
 import BaseSelectList from "metabase/components/SelectList";
 import { alpha, color } from "metabase/lib/colors";
+import type { ColorName } from "metabase/lib/colors/types";
 
 export const TriggerIcon = styled(Icon)`
   color: ${color("white")} !important;
+  flex: 0 0 auto;
 `;
 
 export const TriggerButton = styled.button`
   display: flex;
   align-items: center;
+  min-width: 0;
+  max-width: 50%;
   gap: 0.5rem;
 
   color: ${alpha(color("white"), 0.5)};
@@ -23,16 +27,18 @@ export const TriggerButton = styled.button`
   }
 `;
 
-export const SelectListItem = styled(BaseSelectList.Item)`
+export const SelectListItem = styled(BaseSelectList.Item)<{
+  activeColor: ColorName;
+}>`
   padding: 0.5rem 1rem;
   font-weight: 400;
 
   &[aria-selected="true"] {
-    background-color: ${color("summarize")};
+    background-color: ${props => color(props.activeColor)};
   }
 
   &:hover {
-    background-color: ${color("summarize")};
+    background-color: ${props => color(props.activeColor)};
   }
 `;
 

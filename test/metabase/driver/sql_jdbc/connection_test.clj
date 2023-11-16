@@ -6,6 +6,7 @@
    [metabase.core :as mbc]
    [metabase.db.spec :as mdb.spec]
    [metabase.driver :as driver]
+   [metabase.driver.h2 :as h2]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
    [metabase.driver.sql-jdbc.test-util :as sql-jdbc.tu]
@@ -25,20 +26,19 @@
 (use-fixtures :once (fixtures/initialize :db))
 
 (deftest can-connect-with-details?-test
-  (is (= true
-         (driver.u/can-connect-with-details? :h2 (:details (data/db)))))
-  (testing "Lie and say Test DB is Postgres. `can-connect?` should fail"
-    (is (= false
-           (driver.u/can-connect-with-details? :postgres (:details (data/db))))))
-  (testing "Random made-up DBs should fail"
-    (is (= false
-           (driver.u/can-connect-with-details? :postgres {:host   "localhost"
-                                                          :port   5432
-                                                          :dbname "ABCDEFGHIJKLMNOP"
-                                                          :user   "rasta"}))))
-  (testing "Things that you can connect to, but are not DBs, should fail"
-    (is (= false
-           (driver.u/can-connect-with-details? :postgres {:host "google.com", :port 80})))))
+  (testing "Should not be able to connect without setting h2/*allow-testing-h2-connections*"
+    (is (not (driver.u/can-connect-with-details? :h2 (:details (data/db))))))
+  (binding [h2/*allow-testing-h2-connections* true]
+    (is (driver.u/can-connect-with-details? :h2 (:details (data/db))))
+    (testing "Lie and say Test DB is Postgres. `can-connect?` should fail"
+      (is (not (driver.u/can-connect-with-details? :postgres (:details (data/db))))))
+    (testing "Random made-up DBs should fail"
+      (is (not (driver.u/can-connect-with-details? :postgres {:host   "localhost"
+                                                              :port   5432
+                                                              :dbname "ABCDEFGHIJKLMNOP"
+                                                              :user   "rasta"}))))
+    (testing "Things that you can connect to, but are not DBs, should fail"
+      (is (not (driver.u/can-connect-with-details? :postgres {:host "google.com", :port 80}))))))
 
 (deftest db->pooled-connection-spec-test
   (mt/test-driver :h2
@@ -76,7 +76,7 @@
                (testing "the pool has been destroyed"
                  (is @destroyed?))))))))))
 
-(deftest c3p0-datasource-name-test
+(deftest ^:parallel c3p0-datasource-name-test
   (mt/test-drivers (sql-jdbc.tu/sql-jdbc-drivers)
     (testing "The dataSourceName c3p0 property is set properly for a database"
       (let [db         (mt/db)
@@ -87,7 +87,7 @@
         ;; ensure that, for any sql-jdbc driver anyway, we found *some* DB name to use in this String
         (is (not= db-nm "null"))))))
 
-(deftest same-connection-details-result-in-equal-specs-test
+(deftest ^:parallel same-connection-details-result-in-equal-specs-test
   (testing "Two JDBC specs created with the same details must be considered equal for the connection pool cache to work correctly"
     ;; this is only really a concern for drivers like Spark SQL that create custom DataSources instead of plain details
     ;; maps -- those DataSources need to be considered equal based on the connection string/properties
@@ -201,3 +201,14 @@
         (is (= first-pool second-pool))
         (is (= ::audit-db-not-in-cache!
                (get @#'sql-jdbc.conn/database-id->connection-pool audit-db-id ::audit-db-not-in-cache!)))))))
+
+(deftest ^:parallel include-unreturned-connection-timeout-test
+  (testing "We should be setting unreturnedConnectionTimeout; it should be the same as the query timeout (#33646)"
+    (is (=? {"unreturnedConnectionTimeout" integer?}
+            (sql-jdbc.conn/data-warehouse-connection-pool-properties :h2 (mt/db))))))
+
+(deftest unreturned-connection-timeout-test
+  (testing "We should be able to set jdbc-data-warehouse-unreturned-connection-timeout-seconds via env var (#33646)"
+    (mt/with-temp-env-var-value [mb-jdbc-data-warehouse-unreturned-connection-timeout-seconds "20"]
+      (is (= 20
+             (sql-jdbc.conn/jdbc-data-warehouse-unreturned-connection-timeout-seconds))))))

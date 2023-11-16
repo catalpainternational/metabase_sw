@@ -221,10 +221,14 @@ export const getTableMetadata = createSelector(
   (tableId, metadata) => metadata.table(tableId),
 );
 
-export const getTableForeignKeys = createSelector(
-  [getTableMetadata],
-  table => table?.fks ?? [],
-);
+export const getTableForeignKeys = createSelector([getTableMetadata], table => {
+  const tableForeignKeys = table?.fks ?? [];
+  const tableForeignKeysWithoutHiddenTables = tableForeignKeys.filter(
+    tableForeignKey => tableForeignKey.origin != null,
+  );
+
+  return tableForeignKeysWithoutHiddenTables;
+});
 
 export const getSampleDatabaseId = createSelector(
   [getDatabasesList],
@@ -305,6 +309,12 @@ export const getDatasetEditorTab = createSelector(
 export const getOriginalQuestion = createSelector(
   [getMetadata, getOriginalCard],
   (metadata, card) => metadata && card && new Question(card, metadata),
+);
+
+export const getOriginalQuestionWithParameterValues = createSelector(
+  [getMetadata, getOriginalCard, getParameterValues],
+  (metadata, card, parameterValues) =>
+    metadata && card && new Question(card, metadata, parameterValues),
 );
 
 export const getLastRunQuestion = createSelector(

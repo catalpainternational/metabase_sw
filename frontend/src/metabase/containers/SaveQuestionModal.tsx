@@ -6,6 +6,10 @@ import * as Yup from "yup";
 import ModalContent from "metabase/components/ModalContent";
 import FormProvider from "metabase/core/components/FormProvider/FormProvider";
 import FormCollectionPicker from "metabase/collections/containers/FormCollectionPicker/FormCollectionPicker";
+import {
+  CreateCollectionOnTheGo,
+  OnClickNewCollection,
+} from "metabase/containers/CreateCollectionOnTheGo";
 import Form from "metabase/core/components/Form";
 import FormInput from "metabase/core/components/FormInput";
 import FormFooter from "metabase/core/components/FormFooter";
@@ -47,11 +51,12 @@ const SAVE_QUESTION_SCHEMA = Yup.object({
 interface SaveQuestionModalProps {
   question: Question;
   originalQuestion: Question | null;
-  onCreate: (question: Question) => void;
+  onCreate: (question: Question) => Promise<void>;
   onSave: (question: Question) => Promise<void>;
   onClose: () => void;
   multiStep?: boolean;
   initialCollectionId?: number;
+  onClickNewCollection?: OnClickNewCollection;
 }
 
 interface FormValues {
@@ -76,9 +81,10 @@ export const SaveQuestionModal = ({
   onClose,
   multiStep,
   initialCollectionId,
+  onClickNewCollection,
 }: SaveQuestionModalProps) => {
   const handleOverwrite = useCallback(
-    async (originalQuestion: Question, details: FormValues) => {
+    async (originalQuestion: Question) => {
       const collectionId = canonicalCollectionId(
         originalQuestion.collectionId(),
       );
@@ -120,7 +126,7 @@ export const SaveQuestionModal = ({
   const handleSubmit = useCallback(
     async (details: FormValues) => {
       if (isOverwriteMode(originalQuestion, details.saveType)) {
-        await handleOverwrite(originalQuestion, details);
+        await handleOverwrite(originalQuestion);
       } else {
         await handleCreate(details);
       }
@@ -168,66 +174,72 @@ export const SaveQuestionModal = ({
       : t`What is the name of your model?`;
 
   return (
-    <ModalContent id="SaveQuestionModal" title={title} onClose={onClose}>
-      <FormProvider
-        initialValues={initialValues}
-        onSubmit={handleSubmit}
-        validationSchema={SAVE_QUESTION_SCHEMA}
-        enableReinitialize
-      >
-        {({ values }) => (
-          <Form>
-            {showSaveType && (
-              <FormRadio
-                name="saveType"
-                title={t`Replace or save as new?`}
-                options={[
-                  {
-                    name: t`Replace original question, "${originalQuestion?.displayName()}"`,
-                    value: "overwrite",
-                  },
-                  { name: t`Save as new question`, value: "create" },
-                ]}
-                vertical
-              />
+    <CreateCollectionOnTheGo>
+      {(resumedValues, onClickNewCollection) => (
+        <ModalContent id="SaveQuestionModal" title={title} onClose={onClose}>
+          <FormProvider
+            initialValues={{ ...initialValues, ...resumedValues }}
+            onSubmit={handleSubmit}
+            validationSchema={SAVE_QUESTION_SCHEMA}
+            enableReinitialize
+          >
+            {({ values }) => (
+              <Form>
+                {showSaveType && (
+                  <FormRadio
+                    name="saveType"
+                    title={t`Replace or save as new?`}
+                    options={[
+                      {
+                        name: t`Replace original question, "${originalQuestion?.displayName()}"`,
+                        value: "overwrite",
+                      },
+                      { name: t`Save as new question`, value: "create" },
+                    ]}
+                    vertical
+                  />
+                )}
+                <TransitionGroup>
+                  {values.saveType === "create" && (
+                    <CSSTransition
+                      classNames="saveQuestionModalFields"
+                      timeout={{
+                        enter: 500,
+                        exit: 500,
+                      }}
+                    >
+                      <div className="saveQuestionModalFields">
+                        <FormInput
+                          autoFocus
+                          name="name"
+                          title={t`Name`}
+                          placeholder={nameInputPlaceholder}
+                        />
+                        <FormTextArea
+                          name="description"
+                          title={t`Description`}
+                          placeholder={t`It's optional but oh, so helpful`}
+                        />
+                        <FormCollectionPicker
+                          name="collection_id"
+                          title={t`Which collection should this go in?`}
+                          canCreateNew={true}
+                          onClickNewCollection={onClickNewCollection}
+                        />
+                      </div>
+                    </CSSTransition>
+                  )}
+                </TransitionGroup>
+                <FormFooter>
+                  <FormErrorMessage inline />
+                  <Button type="button" onClick={onClose}>{t`Cancel`}</Button>
+                  <FormSubmitButton title={t`Save`} primary />
+                </FormFooter>
+              </Form>
             )}
-            <TransitionGroup>
-              {values.saveType === "create" && (
-                <CSSTransition
-                  classNames="saveQuestionModalFields"
-                  timeout={{
-                    enter: 500,
-                    exit: 500,
-                  }}
-                >
-                  <div className="saveQuestionModalFields">
-                    <FormInput
-                      autoFocus
-                      name="name"
-                      title={t`Name`}
-                      placeholder={nameInputPlaceholder}
-                    />
-                    <FormTextArea
-                      name="description"
-                      title={t`Description`}
-                      placeholder={t`It's optional but oh, so helpful`}
-                    />
-                    <FormCollectionPicker
-                      name="collection_id"
-                      title={t`Which collection should this go in?`}
-                    />
-                  </div>
-                </CSSTransition>
-              )}
-            </TransitionGroup>
-            <FormFooter>
-              <FormErrorMessage inline />
-              <Button type="button" onClick={onClose}>{t`Cancel`}</Button>
-              <FormSubmitButton title={t`Save`} primary />
-            </FormFooter>
-          </Form>
-        )}
-      </FormProvider>
-    </ModalContent>
+          </FormProvider>
+        </ModalContent>
+      )}
+    </CreateCollectionOnTheGo>
   );
 };

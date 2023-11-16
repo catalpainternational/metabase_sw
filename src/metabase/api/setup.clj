@@ -1,7 +1,7 @@
 (ns metabase.api.setup
   (:require
    [compojure.core :refer [GET POST]]
-   [java-time :as t]
+   [java-time.api :as t]
    [metabase.analytics.snowplow :as snowplow]
    [metabase.api.common :as api]
    [metabase.api.common.validation :as validation]
@@ -90,6 +90,8 @@
     (when-not (some-> (u/ignore-exceptions (driver/the-driver driver)) driver/available?)
       (let [msg (tru "Cannot create Database: cannot find driver {0}." driver)]
         (throw (ex-info msg {:errors {:database {:engine msg}}, :status-code 400}))))
+    (when-let [error (api.database/test-database-connection driver details)]
+      (throw (ex-info (:message error (tru "Cannot connect to Database")) (assoc error :status-code 400))))
     (first (t2/insert-returning-instances! Database
                                            (merge
                                              {:name name, :engine driver, :details details, :creator_id creator-id}
@@ -177,6 +179,9 @@
   [:as {{{:keys [engine details]} :details, token :token} :body}]
   {token  SetupToken
    engine DBEngineString}
+  (when (setup/has-user-setup)
+    (throw (ex-info (tru "Instance already initialized")
+                    {:status-code 400})))
   (let [engine       (keyword engine)
         error-or-nil (api.database/test-database-connection engine details)]
     (when error-or-nil

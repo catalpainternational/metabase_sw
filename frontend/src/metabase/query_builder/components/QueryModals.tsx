@@ -15,7 +15,7 @@ import { SaveQuestionModal } from "metabase/containers/SaveQuestionModal";
 import QuestionSavedModal from "metabase/components/QuestionSavedModal";
 import AddToDashSelectDashModal from "metabase/containers/AddToDashSelectDashModal";
 
-import CollectionMoveModal from "metabase/containers/CollectionMoveModal";
+import { CollectionMoveModal } from "metabase/containers/CollectionMoveModal";
 import ArchiveQuestionModal from "metabase/questions/containers/ArchiveQuestionModal";
 import QuestionEmbedWidget from "metabase/query_builder/containers/QuestionEmbedWidget";
 
@@ -64,8 +64,11 @@ interface QueryModalsProps {
   originalQuestion: Question;
   questionWithParameters: Question;
   card: Card;
-  onCreate: (question: Question) => void;
-  onSave: (question: Question, config?: { rerunQuery: boolean }) => void;
+  onCreate: (question: Question) => Promise<void>;
+  onSave: (
+    question: Question,
+    config?: { rerunQuery: boolean },
+  ) => Promise<void>;
   onCloseModal: () => void;
   onOpenModal: (modal: ModalType) => void;
   onChangeLocation: (location: string) => void;

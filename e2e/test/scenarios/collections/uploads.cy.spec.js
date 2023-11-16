@@ -7,9 +7,12 @@ import {
   expectNoBadSnowplowEvents,
   resetSnowplow,
   enableTracking,
+  setTokenFeatures,
 } from "e2e/support/helpers";
 
-import { WRITABLE_DB_ID } from "e2e/support/cypress_data";
+import { WRITABLE_DB_ID, USER_GROUPS } from "e2e/support/cypress_data";
+
+const { NOSQL_GROUP, ALL_USERS_GROUP } = USER_GROUPS;
 
 const FIXTURE_PATH = "../../e2e/support/assets";
 
@@ -160,6 +163,91 @@ describeWithSnowplow(
     });
   },
 );
+
+describe("permissions", () => {
+  it("should not snow you upload buttons if you are a sandboxed user", () => {
+    restore("postgres-12");
+    cy.signInAsAdmin();
+
+    setTokenFeatures("all");
+    enableUploads("postgres");
+
+    //Deny access for all users to wriable DB
+    cy.updatePermissionsGraph({
+      1: {
+        [WRITABLE_DB_ID]: {
+          data: {
+            schemas: "block",
+          },
+        },
+      },
+    });
+
+    cy.request("GET", `/api/database/${WRITABLE_DB_ID}/schema/public`).then(
+      ({ body: tables }) => {
+        cy.request("GET", `/api/database/${WRITABLE_DB_ID}/fields`).then(
+          ({ body: fields }) => {
+            // Sandbox a table so that the sandboxed user will have read access to a table
+            cy.sandboxTable({
+              table_id: tables[0].id,
+              attribute_remappings: {
+                attr_uid: ["dimension", ["field", fields[0].id, null]],
+              },
+            });
+          },
+        );
+      },
+    );
+
+    cy.signInAsSandboxedUser();
+    cy.visit("/collection/root");
+    // No upload icon should appear for the sandboxed user
+    cy.findByTestId("collection-menu").within(() => {
+      cy.get(".Icon-calendar").should("exist");
+      cy.findByLabelText("Upload data").should("not.exist");
+    });
+  });
+
+  it(
+    "should show you upload buttons if you have unrestricted access to the upload schema",
+    { tags: ["@external"] },
+    () => {
+      restore("postgres-12");
+      cy.signInAsAdmin();
+
+      setTokenFeatures("all");
+      enableUploads("postgres");
+
+      cy.updatePermissionsGraph({
+        [ALL_USERS_GROUP]: {
+          [WRITABLE_DB_ID]: {
+            data: {
+              schemas: "block",
+            },
+          },
+        },
+        [NOSQL_GROUP]: {
+          [WRITABLE_DB_ID]: {
+            data: {
+              schemas: "all",
+            },
+          },
+        },
+      });
+
+      cy.updateCollectionGraph({
+        [NOSQL_GROUP]: { root: "write" },
+      });
+
+      cy.signIn("nosql");
+      cy.visit("/collection/root");
+      cy.findByTestId("collection-menu").within(() => {
+        cy.findByLabelText("Upload data").should("exist");
+        cy.findByRole("img", { name: /upload/i }).should("exist");
+      });
+    },
+  );
+});
 
 function uploadFile(testFile, valid = true) {
   cy.get("@collectionId").then(collectionId =>

@@ -110,19 +110,33 @@ export function formatDateTimeForParameter(value: string, unit: DatetimeUnit) {
   } else if (unit === "day") {
     return m.format("YYYY-MM-DD");
   } else if (unit) {
-    const start = m.clone().startOf(unit);
-    const end = m.clone().endOf(unit);
-
-    if (!start.isValid() || !end.isValid()) {
-      return String(value);
-    }
-
-    const isSameDay = start.isSame(end, "day");
-
-    return isSameDay
-      ? start.format("YYYY-MM-DD")
-      : `${start.format("YYYY-MM-DD")}~${end.format("YYYY-MM-DD")}`;
+    return formatDateToRangeForParameter(value, unit);
   }
+
+  return String(value);
+}
+
+export function formatDateToRangeForParameter(
+  value: string,
+  unit: DatetimeUnit,
+) {
+  const m = parseTimestamp(value, unit);
+  if (!m.isValid()) {
+    return String(value);
+  }
+
+  const start = m.clone().startOf(unit);
+  const end = m.clone().endOf(unit);
+
+  if (!start.isValid() || !end.isValid()) {
+    return String(value);
+  }
+
+  const isSameDay = start.isSame(end, "day");
+
+  return isSameDay
+    ? start.format("YYYY-MM-DD")
+    : `${start.format("YYYY-MM-DD")}~${end.format("YYYY-MM-DD")}`;
 }
 
 /** This formats a time with unit as a date range */
@@ -233,16 +247,18 @@ function replaceDateFormatNames(format: string, options: OptionsType) {
 }
 
 function formatDateTimeWithFormats(
-  value: number,
+  value: number | Moment,
   dateFormat: string,
   timeFormat: string,
   options: OptionsType,
 ) {
-  const m = parseTimestamp(
-    value,
-    options.column && options.column.unit,
-    options.local,
-  );
+  const m = moment.isMoment(value)
+    ? value
+    : parseTimestamp(
+        value,
+        options.column && options.column.unit,
+        options.local,
+      );
   if (!m.isValid()) {
     return String(value);
   }

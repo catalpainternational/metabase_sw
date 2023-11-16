@@ -3,7 +3,7 @@ import { getIn } from "icepick";
 import _ from "underscore";
 import ChartSettingInput from "metabase/visualizations/components/settings/ChartSettingInput";
 import ChartSettingInputGroup from "metabase/visualizations/components/settings/ChartSettingInputGroup";
-import ChartSettingInputNumeric from "metabase/visualizations/components/settings/ChartSettingInputNumeric";
+import { ChartSettingInputNumeric } from "metabase/visualizations/components/settings/ChartSettingInputNumeric";
 import ChartSettingRadio from "metabase/visualizations/components/settings/ChartSettingRadio";
 import ChartSettingSelect from "metabase/visualizations/components/settings/ChartSettingSelect";
 import ChartSettingToggle from "metabase/visualizations/components/settings/ChartSettingToggle";
@@ -243,8 +243,33 @@ export function mergeSettings(first = {}, second = {}) {
       }
     }
   }
+
+  if (first["table.columns"] && second["table.columns"]) {
+    merged["table.columns"] = mergeTableColumns(
+      first["table.columns"],
+      second["table.columns"],
+    );
+  }
+
   return merged;
 }
+
+const mergeTableColumns = (firstTableColumns, secondTableColumns) => {
+  const addedColumns = firstTableColumns.filter(
+    ({ name }) => secondTableColumns.findIndex(col => col.name === name) === -1,
+  );
+  const removedColumns = secondTableColumns
+    .filter(
+      ({ name }) =>
+        firstTableColumns.findIndex(col => col.name === name) === -1,
+    )
+    .map(({ name }) => name);
+
+  return [
+    ...secondTableColumns.filter(({ name }) => !removedColumns.includes(name)),
+    ...addedColumns,
+  ];
+};
 
 export function getClickBehaviorSettings(settings) {
   const newSettings = {};

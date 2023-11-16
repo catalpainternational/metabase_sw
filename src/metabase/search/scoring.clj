@@ -1,7 +1,7 @@
 (ns metabase.search.scoring
   (:require
    [clojure.string :as str]
-   [java-time :as t]
+   [java-time.api :as t]
    [metabase.public-settings.premium-features :refer [defenterprise]]
    [metabase.search.config :as search-config]
    [metabase.search.util :as search-util]
@@ -223,14 +223,14 @@
 
 (defenterprise score-result
   "Score a result, returning a collection of maps with score and weight. Should not include the text scoring, done
-   separately. Should return a sequence of maps with
+  separately. Should return a sequence of maps with
 
     {:weight number,
      :score  number,
      :name   string}"
-   metabase-enterprise.search.scoring
-   [result]
-   (weights-and-scores result))
+  metabase-enterprise.search.scoring
+  [result]
+  (weights-and-scores result))
 
 (defn- sum-weights [weights]
   (reduce

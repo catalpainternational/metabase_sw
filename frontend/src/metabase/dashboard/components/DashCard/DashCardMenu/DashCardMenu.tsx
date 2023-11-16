@@ -17,7 +17,8 @@ import {
   Dataset,
   VisualizationSettings,
 } from "metabase-types/api";
-import Question from "metabase-lib/Question";
+import type Question from "metabase-lib/Question";
+import InternalQuery from "metabase-lib/queries/InternalQuery";
 import { CardMenuRoot } from "./DashCardMenu.styled";
 
 interface OwnProps {
@@ -125,10 +126,18 @@ const DashCardMenu = ({
 interface QueryDownloadWidgetOpts {
   question: Question;
   result?: Dataset;
+  isXray?: boolean;
+  isEmbed: boolean;
+  isPublic?: boolean;
+  isEditing: boolean;
 }
 
 const canEditQuestion = (question: Question) => {
-  return question.query() != null && question.query().isEditable();
+  return (
+    question.canWrite() &&
+    question.query() != null &&
+    question.query().isEditable()
+  );
 };
 
 const canDownloadResults = (result?: Dataset) => {
@@ -139,8 +148,25 @@ const canDownloadResults = (result?: Dataset) => {
   );
 };
 
-DashCardMenu.shouldRender = ({ question, result }: QueryDownloadWidgetOpts) => {
-  return canEditQuestion(question) || canDownloadResults(result);
+DashCardMenu.shouldRender = ({
+  question,
+  result,
+  isXray,
+  isEmbed,
+  isPublic,
+  isEditing,
+}: QueryDownloadWidgetOpts) => {
+  const isInternalQuery = question.query() instanceof InternalQuery;
+  if (isEmbed) {
+    return isEmbed;
+  }
+  return (
+    !isInternalQuery &&
+    !isPublic &&
+    !isEditing &&
+    !isXray &&
+    (canEditQuestion(question) || canDownloadResults(result))
+  );
 };
 
 // eslint-disable-next-line import/no-default-export -- deprecated usage

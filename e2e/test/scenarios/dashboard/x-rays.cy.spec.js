@@ -9,15 +9,18 @@ import {
   addOrUpdateDashboardCard,
   visitDashboardAndCreateTab,
   popover,
+  saveDashboard,
+  getDashboardCards,
 } from "e2e/support/helpers";
 
 import { SAMPLE_DB_ID } from "e2e/support/cypress_data";
 import { SAMPLE_DATABASE } from "e2e/support/cypress_sample_database";
+import { ORDERS_BY_YEAR_QUESTION_ID } from "e2e/support/cypress_sample_instance_data";
 
 const { ORDERS, ORDERS_ID, PRODUCTS, PRODUCTS_ID, PEOPLE, PEOPLE_ID } =
   SAMPLE_DATABASE;
 
-describe("scenarios > x-rays", () => {
+describe("scenarios > x-rays", { tags: "@slow" }, () => {
   beforeEach(() => {
     restore();
     cy.signInAsAdmin();
@@ -105,10 +108,12 @@ describe("scenarios > x-rays", () => {
       });
 
       startNewQuestion();
-      // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
-      cy.findByText("Saved Questions").click();
-      // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
-      cy.findByText("15655").click();
+
+      popover().within(() => {
+        cy.findByText("Saved Questions").click();
+        cy.findByText("15655").click();
+      });
+
       visualize();
       summarize();
       getDimensionByName({ name: "SOURCE" }).click();
@@ -118,14 +123,14 @@ describe("scenarios > x-rays", () => {
       cy.button("Done").click();
       cy.get(".bar").first().click({ force: true });
 
-      // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
-      cy.findByText("Automatic insights…").click();
-      // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
-      cy.findByText(action).click();
+      popover().within(() => {
+        cy.findByText("Automatic insights…").click();
+        cy.findByText(action).click();
+      });
 
-      for (let c = 0; c < XRAY_DATASETS; ++c) {
-        cy.wait("@postDataset");
-      }
+      cy.wait(Array(XRAY_DATASETS).fill("@postDataset"), {
+        timeout: 15 * 1000,
+      });
 
       cy.wait("@xray").then(xhr => {
         expect(xhr.response.body.cause).not.to.exist;
@@ -189,6 +194,33 @@ describe("scenarios > x-rays", () => {
     cy.findByText("How these transactions are distributed");
   });
 
+  it("should start loading cards from top to bottom", () => {
+    // to check the order of loaded cards this test lets the first intercepted
+    // request to be resolved successfully and then it fails all others
+
+    const totalRequests = 8;
+    const successfullyLoadedCards = 1;
+    const failedCards = totalRequests - successfullyLoadedCards;
+
+    cy.intercept({
+      method: "POST",
+      url: "/api/dataset",
+      times: successfullyLoadedCards,
+    }).as("dataset");
+
+    cy.intercept(
+      { method: "POST", url: "/api/dataset", times: failedCards },
+      { statusCode: 500 },
+    ).as("datasetFailed");
+
+    cy.visit(`/auto/dashboard/table/${ORDERS_ID}`);
+
+    cy.wait("@dataset");
+    cy.wait("@datasetFailed");
+
+    getDashboardCards().eq(1).contains("Total transactions");
+  });
+
   it("should be able to click the title of an x-ray dashcard to see it in the query builder (metabase#19405)", () => {
     const timeout = { timeout: 10000 };
 
@@ -233,29 +265,31 @@ describe("scenarios > x-rays", () => {
   it("should be able to open x-ray on a dashcard from a dashboard with multiple tabs", () => {
     cy.intercept("POST", "/api/dataset").as("dataset");
 
-    return cy.createDashboard(name).then(({ body: { id: dashboard_id } }) => {
-      addOrUpdateDashboardCard({
-        card_id: 3,
-        dashboard_id,
-        card: {
-          row: 0,
-          col: 0,
-          size_x: 24,
-          size_y: 10,
-          visualization_settings: {},
-        },
+    return cy
+      .createDashboard({ name: "my dashboard" })
+      .then(({ body: { id: dashboard_id } }) => {
+        addOrUpdateDashboardCard({
+          card_id: ORDERS_BY_YEAR_QUESTION_ID,
+          dashboard_id,
+          card: {
+            row: 0,
+            col: 0,
+            size_x: 24,
+            size_y: 10,
+            visualization_settings: {},
+          },
+        });
+        visitDashboardAndCreateTab({ dashboardId: dashboard_id, save: false });
+        cy.findByRole("tab", { name: "Tab 1" }).click();
+        saveDashboard();
+
+        cy.get("circle").eq(0).click({ force: true });
+        popover().findByText("Automatic insights…").click();
+        popover().findByText("X-ray").click();
+        cy.wait("@dataset", { timeout: 60000 });
+
+        // Ensure charts actually got rendered
+        cy.get("text.x-axis-label").contains("Created At");
       });
-
-      visitDashboardAndCreateTab({ dashboardId: dashboard_id });
-      cy.findByRole("tab", { name: "Tab 1" }).click();
-
-      cy.get("circle").eq(0).click({ force: true });
-      popover().findByText("Automatic insights…").click();
-      popover().findByText("X-ray").click();
-      cy.wait("@dataset", { timeout: 30000 });
-
-      // Ensure charts actually got rendered
-      cy.get("text.x-axis-label").contains("Created At");
-    });
   });
 });

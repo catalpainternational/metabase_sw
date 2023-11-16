@@ -145,6 +145,7 @@
       ;; actually if we are going to `throw-exceptions` we'll rethrow the original but attempt to humanize the message
       ;; first
       (catch Throwable e
+        (log/errorf e "Failed to connect to Database")
         (throw (if-let [humanized-message (some->> (.getMessage e)
                                                    (driver/humanize-connection-error-message driver))]
                  (let [error-data (cond
@@ -468,7 +469,7 @@
 
 (def partner-drivers
   "The set of other drivers in the partnership program"
-  #{"clickhouse" "exasol" "firebolt" "ocient" "starburst"})
+  #{"clickhouse" "exasol" "firebolt" "materialize" "ocient" "starburst"})
 
 (defn driver-source
   "Return the source type of the driver: official, partner, or community"

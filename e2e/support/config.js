@@ -118,6 +118,7 @@ const mainConfig = {
   ...defaultConfig,
   viewportHeight: 800,
   viewportWidth: 1280,
+  numTestsKeptInMemory: 1,
   reporter: "mochawesome",
   reporterOptions: {
     reportDir: "cypress/reports/mochareports",
@@ -127,7 +128,7 @@ const mainConfig = {
     json: true,
   },
   retries: {
-    runMode: 4,
+    runMode: 2,
     openMode: 0,
   },
 };

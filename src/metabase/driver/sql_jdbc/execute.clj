@@ -8,8 +8,7 @@
    [clojure.core.async :as a]
    [clojure.java.jdbc :as jdbc]
    [clojure.string :as str]
-   [java-time :as t]
-   [metabase.db.query :as mdb.query]
+   [java-time.api :as t]
    [metabase.driver :as driver]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.sql-jdbc.execute.diagnostic
@@ -345,9 +344,8 @@
     (log/tracef "Setting default connection options with options %s" (pr-str options))
     (set-best-transaction-level! driver conn)
     (set-time-zone-if-supported! driver conn session-timezone)
-    (set-role-if-supported! driver conn (when (u/id db-or-id-or-spec) (if (integer? db-or-id-or-spec)
-                                                                        (t2/select-one Database db-or-id-or-spec)
-                                                                        db-or-id-or-spec)))
+    (set-role-if-supported! driver conn (cond (integer? db-or-id-or-spec) (t2/select-one Database db-or-id-or-spec)
+                                              (u/id db-or-id-or-spec)     db-or-id-or-spec))
     (let [read-only? (not write?)]
       (try
         ;; Setting the connection to read-only does not prevent writes on some databases, and is meant
@@ -357,15 +355,18 @@
         (.setReadOnly conn read-only?)
         (catch Throwable e
           (log/debugf e "Error setting connection readOnly to %s" (pr-str read-only?)))))
-    ;; if this is (supposedly) a read-only connection, enable auto-commit so this IS NOT ran inside of a transaction.
+    ;; If this is (supposedly) a read-only connection, we would prefer enable auto-commit
+    ;; so this IS NOT ran inside of a transaction, but without transaction the read-only
+    ;; flag has no effect for most of the drivers.
+    ;; TODO Enable auto-commit after having communicated this change in behvaior to our users.
     ;;
     ;; TODO -- for `write?` connections, we should probably disable autoCommit and then manually call `.commit` at after
     ;; `f`... we need to check and make sure that won't mess anything up, since some existing code is already doing it
     ;; manually.
     (when-not write?
       (try
-        (log/trace (pr-str '(.setAutoCommit conn true)))
-        (.setAutoCommit conn true)
+        (log/trace (pr-str '(.setAutoCommit conn false)))
+        (.setAutoCommit conn false)
         (catch Throwable e
           (log/debug e "Error enabling connection autoCommit"))))
     (try
@@ -439,6 +440,14 @@
   "Set parameters for the prepared statement by calling `set-parameter` for each parameter."
   {:added "0.35.0"}
   [driver stmt params]
+  (when (< (try (.. ^PreparedStatement stmt getParameterMetaData getParameterCount)
+                (catch Throwable _ (count params)))
+           (count params))
+    (throw (ex-info (tru "It looks like we got more parameters than we can handle, remember that parameters cannot be used in comments or as identifiers.")
+                    {:driver driver
+                     :type   qp.error-type/driver
+                     :statement (str/split-lines (str stmt))
+                     :params params})))
   (dorun
    (map-indexed
     (fn [i param]
@@ -521,7 +530,7 @@
             (throw (ex-info (tru "Error preparing statement: {0}" (ex-message e))
                             {:driver driver
                              :type   qp.error-type/driver
-                             :sql    (str/split-lines (mdb.query/format-sql sql driver))
+                             :sql    (str/split-lines (driver/prettify-native-form driver sql))
                              :params params}
                             e))))
     (wire-up-canceled-chan-to-cancel-Statement! canceled-chan)))
@@ -673,7 +682,7 @@
                                   (catch Throwable e
                                     (throw (ex-info (tru "Error executing query: {0}" (ex-message e))
                                                     {:driver driver
-                                                     :sql    (str/split-lines (mdb.query/format-sql sql driver))
+                                                     :sql    (str/split-lines (driver/prettify-native-form driver sql))
                                                      :params params
                                                      :type   qp.error-type/invalid-query}
                                                     e))))]
@@ -692,7 +701,8 @@
   (try
     (do-with-connection-with-options
      driver
-     {:session-timezone (qp.timezone/report-timezone-id-if-supported driver (qp.store/database))}
+     {:write? true
+      :session-timezone (qp.timezone/report-timezone-id-if-supported driver (qp.store/database))}
      (fn [^Connection conn]
        (with-open [stmt (statement-or-prepared-statement driver conn sql params nil)]
          {:rows-affected (if (instance? PreparedStatement stmt)

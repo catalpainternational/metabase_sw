@@ -2,7 +2,7 @@
   (:require
    [clojure.test :refer :all]
    [clojurewerkz.quartzite.conversion :as qc]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
    [metabase.models :refer [Card Database PersistedInfo TaskHistory]]
    [metabase.query-processor.timezone :as qp.timezone]
@@ -113,7 +113,6 @@
                                  :schedule "0 30 1/8 * * ? *"
                                  :key (format "metabase.task.PersistenceRefresh.database.trigger.%d" (u/the-id db-2))}}
                (job-info db-1 db-2)))))))
-
 
 (deftest refresh-tables!'-test
   (mt/with-model-cleanup [TaskHistory]

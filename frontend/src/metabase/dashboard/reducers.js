@@ -43,7 +43,7 @@ import {
   UNDO_REMOVE_CARD_FROM_DASH,
   SHOW_AUTO_APPLY_FILTERS_TOAST,
   tabsReducer,
-  SET_LOADING_DASHCARDS_COMPLETE,
+  FETCH_CARD_DATA_PENDING,
 } from "./actions";
 import { syncParametersAndEmbeddingParams } from "./utils";
 import { INITIAL_DASHBOARD_STATE } from "./constants";
@@ -274,6 +274,7 @@ const isNavigatingBackToDashboard = handleActions(
   INITIAL_DASHBOARD_STATE.isNavigatingBackToDashboard,
 );
 
+// Many of these slices are also updated by `tabsReducer` in `frontend/src/metabase/dashboard/actions/tabs.ts`
 const dashcardData = handleActions(
   {
     // clear existing dashboard data when loading a dashboard
@@ -338,7 +339,11 @@ const parameterValues = handleActions(
 
 const draftParameterValues = handleActions(
   {
-    [INITIALIZE]: { next: () => ({}) },
+    [INITIALIZE]: {
+      next: (state, { payload: { clearCache = true } = {} }) => {
+        return clearCache ? {} : state;
+      },
+    },
     [FETCH_DASHBOARD]: {
       next: (
         state,
@@ -358,7 +363,6 @@ const draftParameterValues = handleActions(
     [REMOVE_PARAMETER]: {
       next: (state, { payload: { id } }) => dissoc(state, id),
     },
-    [RESET]: { next: () => ({}) },
   },
   {},
 );
@@ -372,15 +376,21 @@ const loadingDashCards = handleActions(
       }),
     },
     [FETCH_DASHBOARD_CARD_DATA]: {
-      next: (state, { payload: { currentTime, dashcardIds } }) => {
-        const loadingIds = Array.isArray(dashcardIds) ? dashcardIds : [];
-
+      next: (state, { payload: { currentTime, loadingIds } }) => {
         return {
           ...state,
-          dashcardIds: loadingIds,
           loadingIds,
           loadingStatus: loadingIds.length > 0 ? "running" : "idle",
           startTime: loadingIds.length > 0 ? currentTime : null,
+        };
+      },
+    },
+    [FETCH_CARD_DATA_PENDING]: {
+      next: (state, { payload: { dashcard_id } }) => {
+        const loadingIds = state.loadingIds.concat(dashcard_id);
+        return {
+          ...state,
+          loadingIds,
         };
       },
     },
@@ -403,15 +413,6 @@ const loadingDashCards = handleActions(
           ...state,
           loadingIds,
           ...(loadingIds.length === 0 ? { startTime: null } : {}),
-        };
-      },
-    },
-    [SET_LOADING_DASHCARDS_COMPLETE]: {
-      next: state => {
-        return {
-          ...state,
-          loadingIds: [],
-          loadingStatus: "complete",
         };
       },
     },

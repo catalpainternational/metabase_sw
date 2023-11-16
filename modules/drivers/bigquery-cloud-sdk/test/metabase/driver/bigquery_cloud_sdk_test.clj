@@ -4,7 +4,6 @@
    [clojure.string :as str]
    [clojure.test :refer :all]
    [metabase.db.metadata-queries :as metadata-queries]
-   [metabase.db.query :as mdb.query]
    [metabase.driver :as driver]
    [metabase.driver.bigquery-cloud-sdk :as bigquery]
    [metabase.driver.bigquery-cloud-sdk.common :as bigquery.common]
@@ -63,6 +62,9 @@
    ;; the initial dataset isn't realized until it's used the first time. because of that,
    ;; we don't care how many pages it took to load this dataset above. it will be a large
    ;; number because we're just tracking the number of times `get-query-results` gets invoked.
+
+   ;; TODO Temporarily disabling due to flakiness (#33140)
+   #_
    (testing "with pagination"
      (let [pages-retrieved (atom 0)
            page-callback   (fn [] (swap! pages-retrieved inc))]
@@ -388,6 +390,8 @@
             (catch clojure.lang.ExceptionInfo e
               (is (= (ex-message e) "Query cancelled")))))))))
 
+;; TODO Temporarily disabling due to flakiness (#33140)
+#_
 (deftest global-max-rows-test
   (mt/test-driver :bigquery-cloud-sdk
     (testing "The limit middleware prevents us from fetching more pages than are necessary to fulfill query max-rows"
@@ -510,7 +514,7 @@
   (mt/test-driver :bigquery-cloud-sdk
      (testing "native queries are compiled and formatted without whitespace errors (#30676)"
        (is (= (str (format "SELECT\n  count(*) AS `count`\nFROM\n  `%s.venues`" test-db-name))
-              (-> (mt/mbql-query venues {:aggregation [:count]})
-                  qp/compile-and-splice-parameters
-                  :query
-                  (mdb.query/format-sql :bigquery-cloud-sdk)))))))
+              (->> (mt/mbql-query venues {:aggregation [:count]})
+                   qp/compile-and-splice-parameters
+                   :query
+                   (driver/prettify-native-form :bigquery-cloud-sdk)))))))

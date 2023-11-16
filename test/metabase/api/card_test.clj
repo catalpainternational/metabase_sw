@@ -9,7 +9,7 @@
    [clojure.tools.macro :as tools.macro]
    [clojurewerkz.quartzite.scheduler :as qs]
    [dk.ative.docjure.spreadsheet :as spreadsheet]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
    [metabase.analytics.snowplow-test :as snowplow-test]
    [metabase.api.card :as api.card]
@@ -26,7 +26,6 @@
             Database
             Field
             ModerationReview
-            PersistedInfo
             Pulse
             PulseCard
             PulseChannel
@@ -41,6 +40,7 @@
    [metabase.models.permissions-group :as perms-group]
    [metabase.models.revision :as revision :refer [Revision]]
    [metabase.models.user :refer [User]]
+   [metabase.public-settings.premium-features-test :as premium-features-test]
    [metabase.query-processor :as qp]
    [metabase.query-processor.async :as qp.async]
    [metabase.query-processor.card :as qp.card]
@@ -1069,6 +1069,10 @@
                           :moderation_reviews
                           (map clean)))))))))))
 
+(deftest fetch-card-404-test
+  (testing "GET /api/card/:id"
+   (is (= "Not found."
+         (mt/user-http-request :crowberto :get 404 (format "card/%d" Integer/MAX_VALUE))))))
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                       UPDATING A CARD (PUT /api/card/:id)
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -1076,7 +1080,7 @@
 
 (deftest updating-a-card-that-doesnt-exist-should-give-a-404
   (is (= "Not found."
-         (mt/user-http-request :crowberto :put 404 "card/12345"))))
+         (mt/user-http-request :crowberto :put 404 (format "card/%d" Integer/MAX_VALUE)))))
 
 (deftest test-that-we-can-edit-a-card
   (t2.with-temp/with-temp [:model/Card card {:name "Original Name"}]
@@ -2508,7 +2512,8 @@
         (#'task.persist-refresh/job-init!)
         (#'task.sync-databases/job-init)
         (mt/with-temporary-setting-values [:persisted-models-enabled true]
-          (mt/with-temp* [Database [db {:options {:persist-models-enabled true}}]]
+          ;; Use a postgres DB because it supports the :persist-models feature
+          (mt/with-temp* [Database [db {:options {:persist-models-enabled true}, :engine :postgres}]]
             (f db)))
         (finally
           (qs/shutdown sched))))))
@@ -2522,12 +2527,13 @@
 (deftest refresh-persistence
   (testing "Can schedule refreshes for models"
     (with-persistence-setup db
-      (mt/with-temp* [:model/Card          [unmodeled {:dataset false :database_id (u/the-id db)}]
-                      :model/Card          [archived {:dataset true :archived true :database_id (u/the-id db)}]
-                      :model/Card          [model {:dataset true :database_id (u/the-id db)}]
-                      PersistedInfo [pmodel  {:card_id (u/the-id model) :database_id (u/the-id db)}]
-                      PersistedInfo [punmodeled  {:card_id (u/the-id unmodeled) :database_id (u/the-id db)}]
-                      PersistedInfo [parchived  {:card_id (u/the-id archived) :database_id (u/the-id db)}]]
+      (t2.with-temp/with-temp
+        [:model/Card          model      {:dataset true :database_id (u/the-id db)}
+         :model/Card          notmodel   {:dataset false :database_id (u/the-id db)}
+         :model/Card          archived   {:dataset true :archived true :database_id (u/the-id db)}
+         :model/PersistedInfo pmodel     {:card_id (u/the-id model) :database_id (u/the-id db)}
+         :model/PersistedInfo pnotmodel  {:card_id (u/the-id notmodel) :database_id (u/the-id db)}
+         :model/PersistedInfo parchived  {:card_id (u/the-id archived) :database_id (u/the-id db)}]
         (testing "Can refresh models"
           (mt/user-http-request :crowberto :post 204 (format "card/%d/refresh" (u/the-id model)))
           (is (contains? (task.persist-refresh/job-info-for-individual-refresh)
@@ -2536,13 +2542,50 @@
         (testing "Won't refresh archived models"
           (mt/user-http-request :crowberto :post 400 (format "card/%d/refresh" (u/the-id archived)))
           (is (not (contains? (task.persist-refresh/job-info-for-individual-refresh)
-                              (u/the-id punmodeled)))
+                              (u/the-id pnotmodel)))
               "Scheduled refresh of archived model"))
         (testing "Won't refresh cards no longer models"
-          (mt/user-http-request :crowberto :post 400 (format "card/%d/refresh" (u/the-id unmodeled)))
+          (mt/user-http-request :crowberto :post 400 (format "card/%d/refresh" (u/the-id notmodel)))
           (is (not (contains? (task.persist-refresh/job-info-for-individual-refresh)
                               (u/the-id parchived)))
               "Scheduled refresh of archived model"))))))
+
+(deftest unpersist-persist-model-test
+  (with-persistence-setup db
+    (t2.with-temp/with-temp
+      [:model/Card          model     {:database_id (u/the-id db), :dataset true}
+       :model/PersistedInfo pmodel    {:database_id (u/the-id db), :card_id (u/the-id model)}]
+      (testing "Can't unpersist models without :cache-granular-controls feature flag enabled"
+        (premium-features-test/with-premium-features #{}
+          (mt/user-http-request :crowberto :post 402 (format "card/%d/unpersist" (u/the-id model)))
+          (is (= "persisted"
+                 (t2/select-one-fn :state :model/PersistedInfo :id (u/the-id pmodel))))))
+      (testing "Can unpersist models with the :cache-granular-controls feature flag enabled"
+        (premium-features-test/with-premium-features #{:cache-granular-controls}
+          (mt/user-http-request :crowberto :post 204 (format "card/%d/unpersist" (u/the-id model)))
+          (is (= "off"
+                 (t2/select-one-fn :state :model/PersistedInfo :id (u/the-id pmodel))))))
+      (testing "Can't re-persist models with the :cache-granular-controls feature flag enabled"
+        (premium-features-test/with-premium-features #{}
+          (mt/user-http-request :crowberto :post 402 (format "card/%d/persist" (u/the-id model)))
+          (is (= "off"
+                 (t2/select-one-fn :state :model/PersistedInfo :id (u/the-id pmodel))))))
+      (testing "Can re-persist models with the :cache-granular-controls feature flag enabled"
+        (premium-features-test/with-premium-features #{:cache-granular-controls}
+          (mt/user-http-request :crowberto :post 204 (format "card/%d/persist" (u/the-id model)))
+          (is (= "creating"
+                 (t2/select-one-fn :state :model/PersistedInfo :id (u/the-id pmodel)))))))
+    (t2.with-temp/with-temp
+      [:model/Card          notmodel  {:database_id (u/the-id db), :dataset false}
+       :model/PersistedInfo pnotmodel {:database_id (u/the-id db), :card_id (u/the-id notmodel)}]
+      (premium-features-test/with-premium-features #{:cache-granular-controls}
+        (testing "Allows unpersisting non-model cards"
+          (mt/user-http-request :crowberto :post 204 (format "card/%d/unpersist" (u/the-id notmodel)))
+          (is (= "off"
+                 (t2/select-one-fn :state :model/PersistedInfo :id (u/the-id pnotmodel)))))
+        (testing "Can't re-persist non-model cards"
+          (is (= "Card is not a model"
+                 (mt/user-http-request :crowberto :post 400 (format "card/%d/persist" (u/the-id notmodel))))))))))
 
 (defn param-values-url
   "Returns an URL used to get values for parameter of a card.
@@ -2782,19 +2825,20 @@
    (upload-example-csv! collection-id true))
   ([collection-id grant-permission?]
    (mt/with-current-user (mt/user->id :rasta)
-     (let [file              (upload-test/csv-file-with
+     (let [;; Make the file-name unique so the table names don't collide
+           csv-file-name     (str "example csv file " (random-uuid) ".csv")
+           file              (upload-test/csv-file-with
                               ["id, name"
                                "1, Luke Skywalker"
                                "2, Darth Vader"]
-                              "example_csv_file")
+                              csv-file-name)
            group-id          (u/the-id (perms-group/all-users))
            can-already-read? (mi/can-read? (mt/db))
            grant?            (and (not can-already-read?)
                                   grant-permission?)]
        (when grant?
          (perms/grant-permissions! group-id (perms/data-perms-path (mt/id))))
-       (u/prog1
-         (api.card/upload-csv! collection-id "example_csv_file.csv" file)
+       (u/prog1 (api.card/upload-csv! collection-id csv-file-name file)
          (when grant?
            (perms/revoke-data-perms! group-id (mt/id))))))))
 
@@ -2829,7 +2873,7 @@
                                               :query    {:source-table (:id new-table)}
                                               :type     :query}
                            :creator_id       (mt/user->id :rasta)
-                           :name             "Example Csv File"
+                           :name             #"(?i)example csv file(.*)"
                            :collection_id    nil} new-model)
                       "A new model is created")
                   (is (=? {:name      #"(?i)example(.*)"
@@ -2864,7 +2908,8 @@
             (if (= driver/*driver* :mysql)
               (let [new-model (upload-example-csv! nil)
                     new-table (t2/select-one Table :db_id db-id)]
-                (is (= "Example Csv File" (:name new-model)))
+                (is (=? {:name #"(?i)example csv file(.*)"}
+                        new-model))
                 (is (=? {:name #"(?i)uploaded_magic_example(.*)"}
                         new-table))
                 (if (= driver/*driver* :mysql)

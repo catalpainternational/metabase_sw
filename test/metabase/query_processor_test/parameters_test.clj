@@ -4,7 +4,7 @@
   (:require
    [clojure.string :as str]
    [clojure.test :refer :all]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
    [metabase.driver :as driver]
    [metabase.models :refer [Card]]
@@ -209,7 +209,39 @@
                :database   (mt/id)
                :parameters [{:type   :category
                              :target [:dimension [:template-tag "price"]]
-                             :value  [1 2]}]}))))))
+                             :value  [1 2]}]}))))
+    (testing "Comma-separated numbers in a number field"
+      ;; this is an undocumented feature but lots of people rely on it, so we want it to continue working.
+      (is (= {:query "SELECT * FROM VENUES WHERE price IN (1, 2, 3)"
+              :params []}
+             (qp/compile-and-splice-parameters
+              {:type :native
+               :native {:query "SELECT * FROM VENUES WHERE price IN ({{number_comma}})"
+                        :template-tags {"number_comma"
+                                        {:name "number_comma"
+                                         :display-name "Number Comma"
+                                         :type :number
+                                         :dimension [:field (mt/id :venues :price) nil]}}}
+               :database (mt/id)
+               :parameters [{:type "number/="
+                             :value ["1,2,3"]
+                             :target [:variable [:template-tag "number_comma"]]}]}))))
+    (testing "Trailing commas do not cause errors"
+      ;; this is an undocumented feature but lots of people rely on it, so we want it to continue working.
+      (is (= {:query "SELECT * FROM VENUES WHERE price IN (1, 2)"
+              :params []}
+             (qp/compile-and-splice-parameters
+              {:type :native
+               :native {:query "SELECT * FROM VENUES WHERE price IN ({{number_comma}})"
+                        :template-tags {"number_comma"
+                                        {:name "number_comma"
+                                         :display-name "Number Comma"
+                                         :type :number
+                                         :dimension [:field (mt/id :venues :price) nil]}}}
+               :database (mt/id)
+               :parameters [{:type "number/="
+                             :value ["1,2,"]
+                             :target [:variable [:template-tag "number_comma"]]}]}))))))
 
 (deftest params-in-comments-test
   (testing "Params in SQL comments are ignored"
@@ -247,6 +279,32 @@
                :parameters [{:type   :category
                              :target [:dimension [:template-tag "price"]]
                              :value  [1 2]}]}))))))
+
+(deftest better-error-when-parameter-mismatch
+  (mt/test-drivers (->> (mt/normal-drivers-with-feature :native-parameters)
+                        (filter #(isa? driver/hierarchy % :sql))
+                        ;; These do not support ParameterMetadata.getParameterCount
+                        (remove #{:athena
+                                  :bigquery-cloud-sdk
+                                  :presto-jdbc
+                                  :redshift
+                                  :snowflake
+                                  :sparksql
+                                  :vertica}))
+    (is (thrown-with-msg?
+          Exception
+          #"It looks like we got more parameters than we can handle, remember that parameters cannot be used in comments or as identifiers."
+          (qp/process-query
+            {:type       :native
+             :native     {:query         "SELECT * FROM \n[[-- {{name}}]]\n VENUES [[WHERE {{name}} = price]]"
+                          :template-tags {"name"
+                                          {:name         "name"
+                                           :display-name "Name"
+                                           :type         :text}}}
+             :database   (mt/id)
+             :parameters [{:type   :category
+                           :target [:variable [:template-tag "name"]]
+                           :value "foobar"}]})))))
 
 (deftest ignore-parameters-for-unparameterized-native-query-test
   (testing "Parameters passed for unparameterized queries should get ignored"

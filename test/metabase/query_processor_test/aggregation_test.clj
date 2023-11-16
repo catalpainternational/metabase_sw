@@ -152,10 +152,14 @@
 (deftest ^:parallel cumulative-sum-test
   (mt/test-drivers (mt/normal-drivers)
     (testing "cum_sum w/o breakout should be treated the same as sum"
-      (is (= [[120]]
-             (mt/formatted-rows [int]
-               (mt/run-mbql-query users
-                 {:aggregation [[:cum-sum $id]]})))))))
+      (let [result (mt/run-mbql-query users
+                     {:aggregation [[:cum-sum $id]]})]
+        (is (=? [{:display_name "Cumulative sum of ID",
+                  :source :aggregation}]
+                (-> result :data :cols)))
+        (is (= [[120]]
+               (mt/formatted-rows [int]
+                 result)))))))
 
 (deftest ^:parallel cumulative-sum-test-2
   (mt/test-drivers (mt/normal-drivers)
@@ -295,6 +299,24 @@
                (mt/run-mbql-query venues
                  {:aggregation [[:distinct $name]
                                 [:distinct $price]]})))))))
+
+(deftest ^:parallel aggregate-boolean-without-type-test
+  (testing "Legacy breakout on boolean field should work correctly (#34286)"
+    (mt/dataset places-cam-likes
+      (is (= {false 1, true 2}
+             (into {}
+                   (mt/formatted-rows [boolean int]
+                     (mt/run-mbql-query places
+                       {:breakout     [[:field %liked nil]]
+                        :aggregation  [["count"]]})))))))
+  (testing "Legacy breakout on boolean field with explicit type should work correctly (#34286)"
+    (mt/dataset places-cam-likes
+      (is (= {false 1, true 2}
+             (into {}
+                   (mt/formatted-rows [boolean int]
+                     (mt/run-mbql-query places
+                       {:breakout     [[:field %liked {:base-type :type/Boolean}]]
+                        :aggregation  [["count"]]}))))))))
 
 ;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ;; !                                                                                                                   !

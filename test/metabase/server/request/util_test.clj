@@ -1,8 +1,8 @@
-(ns ^:mb/once metabase.server.request.util-test
+(ns metabase.server.request.util-test
   (:require
    [clojure.test :refer :all]
    [clojure.tools.reader.edn :as edn]
-   [java-time :as t]
+   [java-time.api :as t]
    [metabase.server.request.util :as request.u]
    [metabase.test :as mt]
    [ring.mock.request :as ring.mock]
@@ -54,7 +54,7 @@
     nil
     nil))
 
-(deftest ^:parallel ip-address-test
+(deftest ip-address-test
   (let [request (ring.mock/request :get "api/session")]
     (testing "request with no forwarding"
       (is (= "127.0.0.1"

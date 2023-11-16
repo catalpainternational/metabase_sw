@@ -115,9 +115,7 @@ async function fetchAndPrepareSavedQuestionCards(
 
   // for showing the "started from" lineage correctly when adding filters/breakouts and when going back and forth
   // in browser history, the original_card_id has to be set for the current card (simply the id of card itself for now)
-  card.original_card_id = card.id;
-
-  return { card, originalCard };
+  return { card: { ...card, original_card_id: card.id }, originalCard };
 }
 
 async function fetchAndPrepareAdHocQuestionCards(
@@ -304,9 +302,11 @@ async function handleQBInit(
   const metadata = getMetadata(getState());
 
   let question = new Question(card, metadata);
+
   if (question.isSaved()) {
-    // Don't set viz automatically for saved questions
-    question = question.lockDisplay();
+    if (!question.isDataset()) {
+      question = question.lockDisplay();
+    }
 
     const currentUser = getUser(getState());
     if (currentUser?.is_qbnewb) {

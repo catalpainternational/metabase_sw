@@ -51,7 +51,7 @@
                                             {:mvn/version "0.64.0"}             ; Flexmark extension for auto-linking bare URLs
   commons-fileupload/commons-fileupload     {:mvn/version "1.5"}                ; ring/ring-core 1.9.6 uses v1.4, but we want 1.5 due to a CVE. When we upgrade to the forthcoming ring/ring-core 1.10.0 we can remove this.
   commons-codec/commons-codec               {:mvn/version "1.15"}               ; Apache Commons -- useful codec util fns
-  commons-io/commons-io                     {:mvn/version "2.11.0"}             ; Apache Commons -- useful IO util fns
+  commons-io/commons-io                     {:mvn/version "2.13.0"}             ; Apache Commons -- useful IO util fns
   commons-net/commons-net                   {:mvn/version "3.9.0"}              ; Apache Commons -- useful network utils. Transitive dep of Snowplow, pinned due to CVE-2021-37533
   commons-validator/commons-validator       {:mvn/version "1.7"                 ; Apache Commons -- useful validation util fns
                                              :exclusions  [commons-beanutils/commons-beanutils
@@ -83,7 +83,7 @@
                                              :exclusions  [org.clojure/data.avl]}
   medley/medley                             {:mvn/version "1.4.0"}              ; lightweight lib of useful functions
   metabase/connection-pool                  {:mvn/version "1.2.0"}              ; simple wrapper around C3P0. JDBC connection pools
-  metabase/saml20-clj                       {:mvn/version "2.2.1"}              ; EE SAML integration.
+  metabase/saml20-clj                       {:mvn/version "2.2.2"}              ; EE SAML integration.
   metabase/throttle                         {:mvn/version "1.0.2"}              ; Tools for throttling access to API endpoints and other code pathways
   metosin/malli                             {:mvn/version "0.10.2"}             ; Data-driven Schemas for Clojure/Script and babashka
   nano-id/nano-id                           {:mvn/version "1.0.0"}              ; NanoID generator for generating entity_ids
@@ -107,11 +107,11 @@
                                             {:mvn/version "2.20.0"}             ; allows the slf4j2 API to work with log4j 2
   org.apache.logging.log4j/log4j-layout-template-json
                                             {:mvn/version "2.20.0"}             ; allows the custom json logging format
-  org.apache.poi/poi                        {:mvn/version "5.2.3"}              ; Work with Office documents (e.g. Excel spreadsheets) -- newer version than one specified by Docjure
+  org.apache.poi/poi                        {:mvn/version "5.2.4"}              ; Work with Office documents (e.g. Excel spreadsheets) -- newer version than one specified by Docjure
   org.apache.poi/poi-ooxml                  {:mvn/version "5.2.3"
                                              :exclusions  [org.bouncycastle/bcpkix-jdk15on
                                                            org.bouncycastle/bcprov-jdk15on]}
-  org.apache.sshd/sshd-core                 {:mvn/version "2.9.2"}              ; ssh tunneling and test server
+  org.apache.sshd/sshd-core                 {:mvn/version "2.10.0"}             ; ssh tunneling and test server
   org.apache.xmlgraphics/batik-all          {:mvn/version "1.16"}               ; SVG -> image
   org.clojars.pntblnk/clj-ldap              {:mvn/version "0.0.17"}             ; LDAP client
   org.bouncycastle/bcpkix-jdk15on           {:mvn/version "1.70"}               ; Bouncy Castle crypto library -- explicit version of BC specified to resolve illegal reflective access errors
@@ -306,6 +306,7 @@
     cljs-bean/cljs-bean                {:mvn/version "1.9.0"}
     com.lambdaisland/glogi             {:mvn/version "1.2.164"}
     io.github.metabase/hawk            {:sha "70611745e3cb8b95d5793a88581d5c330148715b"}
+    org.clojars.mmb90/cljs-cache       {:mvn/version "0.1.4"}
     ;; Forcibly targeting a newer release than ships by default with shadow-cljs 2.20.20.
     ;; It fixes an issue where TypeScript can't parse the `cljs_env.js` output file.
     org.clojure/google-closure-library {:mvn/version "0.0-20230227-c7c0a541"}

@@ -13,6 +13,7 @@ import {
   main,
 } from "e2e/support/helpers";
 import { USERS } from "e2e/support/cypress_data";
+import { ADMIN_PERSONAL_COLLECTION_ID } from "e2e/support/cypress_sample_instance_data";
 
 const { admin } = USERS;
 
@@ -49,15 +50,15 @@ describe("scenarios > home > homepage", () => {
 
     it("should display x-rays for a user database", () => {
       cy.signInAsAdmin();
-      cy.addH2SampleDatabase({ name: "H2" });
+      cy.addSQLiteDatabase();
 
       cy.visit("/");
       cy.wait("@getXrayCandidates");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
       cy.findByText("Here are some explorations of");
-      cy.findAllByRole("link").contains("H2");
+      cy.findAllByRole("link").contains("sqlite");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
-      cy.findByText("Orders").click();
+      cy.findByText("Number With Nulls").click();
 
       cy.wait("@getXrayDashboard");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
@@ -66,7 +67,7 @@ describe("scenarios > home > homepage", () => {
 
     it("should allow switching between multiple schemas for x-rays", () => {
       cy.signInAsAdmin();
-      cy.addH2SampleDatabase({ name: "H2" });
+      cy.addSQLiteDatabase({ name: "sqlite" });
       cy.intercept("/api/automagic-*/database/**", getXrayCandidates());
 
       cy.visit("/");
@@ -74,7 +75,7 @@ describe("scenarios > home > homepage", () => {
       cy.findByText(/Here are some explorations of the/);
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
       cy.findByText("public");
-      cy.findAllByRole("link").contains("H2");
+      cy.findAllByRole("link").contains("sqlite");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
       cy.findByText("Orders");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
@@ -200,16 +201,34 @@ describe("scenarios > home > custom homepage", () => {
 
       // Do a page refresh and test dashboard header
       cy.visit("/");
-
       cy.location("pathname").should("equal", "/dashboard/1");
 
-      dashboardHeader().within(() => {
-        cy.icon("pencil").click();
-        cy.findByText(/Remember that this dashboard is set as homepage/);
-      });
+      cy.findByLabelText("Edit dashboard").click();
+      cy.findByTestId("edit-bar").findByText(
+        "You're editing this dashboard. Remember that this dashboard is set as homepage.",
+      );
     });
 
     it("should give you the option to set a custom home page using home page CTA", () => {
+      cy.request("POST", "/api/collection", {
+        name: "Personal nested Collection",
+        color: "#509ee3",
+        description: `nested 1 level`,
+        parent_id: ADMIN_PERSONAL_COLLECTION_ID,
+      }).then(({ body }) => {
+        cy.request("POST", "/api/collection", {
+          name: "Personal nested nested Collection",
+          color: "#509ee3",
+          description: `nested 2 levels`,
+          parent_id: body.id,
+        }).then(({ body }) => {
+          cy.createDashboard({
+            name: "nested dash",
+            collection_id: body.id,
+          });
+        });
+      });
+
       cy.visit("/");
       cy.get("main").findByText("Customize").click();
 
@@ -218,11 +237,24 @@ describe("scenarios > home > custom homepage", () => {
         cy.findByText(/Select a dashboard/i).click();
       });
 
-      //Ensure that personal collections have been removed
-      popover().contains("Your personal collection").should("not.exist");
-      popover().contains("All personal collections").should("not.exist");
+      popover().within(() => {
+        //Ensure that personal collections have been removed
+        cy.findByText("First collection").should("exist");
+        cy.findByText("Your personal collection").should("not.exist");
+        cy.findByText("All personal collections").should("not.exist");
+        cy.findByText(/nested/i).should("not.exist");
 
-      popover().findByText("Orders in a dashboard").click();
+        //Ensure that child dashboards of personal collections do not
+        //appear in search
+        cy.findByRole("button", { name: /search/ }).click();
+        cy.findByPlaceholderText("Search").type("das{enter}");
+        cy.findByText("Orders in a dashboard").should("exist");
+        cy.findByText("nested dash").should("not.exist");
+        cy.findByRole("button", { name: /close/ }).click();
+
+        cy.findByText("Orders in a dashboard").click();
+      });
+
       modal().findByRole("button", { name: "Save" }).click();
       cy.location("pathname").should("equal", "/dashboard/1");
 

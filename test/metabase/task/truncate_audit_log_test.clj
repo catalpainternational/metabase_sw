@@ -1,7 +1,7 @@
 (ns metabase.task.truncate-audit-log-test
   (:require
    [clojure.test :refer :all]
-   [java-time :as t]
+   [java-time.api :as t]
    [metabase.models.query-execution :refer [QueryExecution]]
    [metabase.models.setting :as setting]
    [metabase.public-settings.premium-features :as premium-features]
@@ -13,7 +13,7 @@
 
 (deftest audit-max-retention-days-test
   ;; Tests for the EE implementation are in `metabase-enterprise.task.truncate-audit-log-test`
-  (with-redefs [premium-features/enable-advanced-config? (constantly false)]
+  (with-redefs [premium-features/enable-audit-app? (constantly false)]
     (testing "Self-hosted OSS instances default to infinite retention and cannot be changed"
         (is (= ##Inf (truncate-audit-log.i/audit-max-retention-days)))
 

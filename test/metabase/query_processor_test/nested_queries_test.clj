@@ -4,9 +4,8 @@
    [clojure.string :as str]
    [clojure.test :refer :all]
    [honey.sql :as sql]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
-   [metabase.db.query :as mdb.query]
    [metabase.driver :as driver]
    [metabase.driver.sql.query-processor-test-util :as sql.qp-test-util]
    [metabase.mbql.schema :as mbql.s]
@@ -426,7 +425,7 @@
                                   :breakout     [$price]
                                   :order-by     [[[:aggregation 0] :descending]]}
                    :aggregation  [[:avg *stddev/Integer]]}))
-               (update :query #(str/split-lines (mdb.query/format-sql % :h2))))))))
+               (update :query #(str/split-lines (driver/prettify-native-form :h2 %))))))))
 
 (deftest handle-incorrect-field-forms-gracefully-test
   (testing "make sure that we handle [:field [:field <name> ...]] forms gracefully, despite that not making any sense"
