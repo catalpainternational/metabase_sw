@@ -138,6 +138,7 @@ export const createMockSettings = (opts?: Partial<Settings>): Settings => ({
   "application-name": "Metabase",
   "available-fonts": [],
   "available-locales": null,
+  "bcc-enabled?": true,
   "cloud-gateway-ips": null,
   "custom-formatting": {},
   "custom-homepage": false,
@@ -211,5 +212,6 @@ export const createMockSettings = (opts?: Partial<Settings>): Settings => ({
   "uploads-table-prefix": null,
   "uploads-schema-name": null,
   "user-visibility": null,
+  "last-acknowledged-version": "v1",
   ...opts,
 });

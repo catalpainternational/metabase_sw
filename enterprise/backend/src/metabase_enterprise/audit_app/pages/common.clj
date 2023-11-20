@@ -6,7 +6,7 @@
    [clojure.walk :as walk]
    [honey.sql :as sql]
    [honey.sql.helpers :as sql.helpers]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
    [metabase-enterprise.audit-app.query-processor.middleware.handle-audit-queries
     :as qp.middleware.audit]
@@ -121,7 +121,8 @@
                     stmt (sql-jdbc.execute/prepared-statement driver conn sql params)
                     rs   (sql-jdbc.execute/execute-prepared-statement! driver stmt)]
           (let [rsmeta   (.getMetaData rs)
-                cols     (sql-jdbc.execute/column-metadata driver rsmeta)
+                cols     (for [col (sql-jdbc.execute/column-metadata driver rsmeta)]
+                           (update col :name u/lower-case-en))
                 metadata {:cols cols}
                 rf       (rff metadata)]
             (reduce rf init (sql-jdbc.execute/reducible-rows driver rs rsmeta canceled-chan))))

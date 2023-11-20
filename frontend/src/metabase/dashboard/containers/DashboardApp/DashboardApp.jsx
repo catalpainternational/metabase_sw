@@ -25,8 +25,6 @@ import {
   getUserIsAdmin,
 } from "metabase/selectors/user";
 
-import { getEmbedOptions } from "metabase/selectors/embed";
-
 import { parseHashOptions } from "metabase/lib/browser";
 import * as Urls from "metabase/lib/urls";
 
@@ -61,7 +59,7 @@ import {
   getSlowCards,
   getIsAutoApplyFilters,
   getSelectedTabId,
-  getisNavigatingBackToDashboard,
+  getIsNavigatingBackToDashboard,
 } from "../../selectors";
 import { DASHBOARD_SLOW_TIMEOUT } from "../../constants";
 
@@ -103,10 +101,9 @@ const mapStateToProps = state => {
     isLoadingComplete: getIsLoadingComplete(state),
     isHeaderVisible: getIsHeaderVisible(state),
     isAdditionalInfoVisible: getIsAdditionalInfoVisible(state),
-    embedOptions: getEmbedOptions(state),
     selectedTabId: getSelectedTabId(state),
     isAutoApplyFilters: getIsAutoApplyFilters(state),
-    isNavigatingBackToDashboard: getisNavigatingBackToDashboard(state),
+    isNavigatingBackToDashboard: getIsNavigatingBackToDashboard(state),
   };
 };
 

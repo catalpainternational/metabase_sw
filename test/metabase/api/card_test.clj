@@ -9,7 +9,7 @@
    [clojure.tools.macro :as tools.macro]
    [clojurewerkz.quartzite.scheduler :as qs]
    [dk.ative.docjure.spreadsheet :as spreadsheet]
-   [java-time :as t]
+   [java-time.api :as t]
    [medley.core :as m]
    [metabase.analytics.snowplow-test :as snowplow-test]
    [metabase.api.card :as api.card]
@@ -1069,6 +1069,10 @@
                           :moderation_reviews
                           (map clean)))))))))))
 
+(deftest fetch-card-404-test
+  (testing "GET /api/card/:id"
+   (is (= "Not found."
+         (mt/user-http-request :crowberto :get 404 (format "card/%d" Integer/MAX_VALUE))))))
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                       UPDATING A CARD (PUT /api/card/:id)
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -1076,7 +1080,7 @@
 
 (deftest updating-a-card-that-doesnt-exist-should-give-a-404
   (is (= "Not found."
-         (mt/user-http-request :crowberto :put 404 "card/12345"))))
+         (mt/user-http-request :crowberto :put 404 (format "card/%d" Integer/MAX_VALUE)))))
 
 (deftest test-that-we-can-edit-a-card
   (t2.with-temp/with-temp [:model/Card card {:name "Original Name"}]
@@ -2821,19 +2825,20 @@
    (upload-example-csv! collection-id true))
   ([collection-id grant-permission?]
    (mt/with-current-user (mt/user->id :rasta)
-     (let [file              (upload-test/csv-file-with
+     (let [;; Make the file-name unique so the table names don't collide
+           csv-file-name     (str "example csv file " (random-uuid) ".csv")
+           file              (upload-test/csv-file-with
                               ["id, name"
                                "1, Luke Skywalker"
                                "2, Darth Vader"]
-                              "example_csv_file")
+                              csv-file-name)
            group-id          (u/the-id (perms-group/all-users))
            can-already-read? (mi/can-read? (mt/db))
            grant?            (and (not can-already-read?)
                                   grant-permission?)]
        (when grant?
          (perms/grant-permissions! group-id (perms/data-perms-path (mt/id))))
-       (u/prog1
-         (api.card/upload-csv! collection-id "example_csv_file.csv" file)
+       (u/prog1 (api.card/upload-csv! collection-id csv-file-name file)
          (when grant?
            (perms/revoke-data-perms! group-id (mt/id))))))))
 
@@ -2868,7 +2873,7 @@
                                               :query    {:source-table (:id new-table)}
                                               :type     :query}
                            :creator_id       (mt/user->id :rasta)
-                           :name             "Example Csv File"
+                           :name             #"(?i)example csv file(.*)"
                            :collection_id    nil} new-model)
                       "A new model is created")
                   (is (=? {:name      #"(?i)example(.*)"
@@ -2903,7 +2908,8 @@
             (if (= driver/*driver* :mysql)
               (let [new-model (upload-example-csv! nil)
                     new-table (t2/select-one Table :db_id db-id)]
-                (is (= "Example Csv File" (:name new-model)))
+                (is (=? {:name #"(?i)example csv file(.*)"}
+                        new-model))
                 (is (=? {:name #"(?i)uploaded_magic_example(.*)"}
                         new-table))
                 (if (= driver/*driver* :mysql)

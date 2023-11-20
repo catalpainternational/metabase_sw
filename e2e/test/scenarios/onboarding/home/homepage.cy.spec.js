@@ -50,15 +50,15 @@ describe("scenarios > home > homepage", () => {
 
     it("should display x-rays for a user database", () => {
       cy.signInAsAdmin();
-      cy.addH2SampleDatabase({ name: "H2" });
+      cy.addSQLiteDatabase();
 
       cy.visit("/");
       cy.wait("@getXrayCandidates");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
       cy.findByText("Here are some explorations of");
-      cy.findAllByRole("link").contains("H2");
+      cy.findAllByRole("link").contains("sqlite");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
-      cy.findByText("Orders").click();
+      cy.findByText("Number With Nulls").click();
 
       cy.wait("@getXrayDashboard");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
@@ -67,7 +67,7 @@ describe("scenarios > home > homepage", () => {
 
     it("should allow switching between multiple schemas for x-rays", () => {
       cy.signInAsAdmin();
-      cy.addH2SampleDatabase({ name: "H2" });
+      cy.addSQLiteDatabase({ name: "sqlite" });
       cy.intercept("/api/automagic-*/database/**", getXrayCandidates());
 
       cy.visit("/");
@@ -75,7 +75,7 @@ describe("scenarios > home > homepage", () => {
       cy.findByText(/Here are some explorations of the/);
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
       cy.findByText("public");
-      cy.findAllByRole("link").contains("H2");
+      cy.findAllByRole("link").contains("sqlite");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
       cy.findByText("Orders");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
@@ -201,13 +201,12 @@ describe("scenarios > home > custom homepage", () => {
 
       // Do a page refresh and test dashboard header
       cy.visit("/");
-
       cy.location("pathname").should("equal", "/dashboard/1");
 
-      dashboardHeader().within(() => {
-        cy.icon("pencil").click();
-        cy.findByText(/Remember that this dashboard is set as homepage/);
-      });
+      cy.findByLabelText("Edit dashboard").click();
+      cy.findByTestId("edit-bar").findByText(
+        "You're editing this dashboard. Remember that this dashboard is set as homepage.",
+      );
     });
 
     it("should give you the option to set a custom home page using home page CTA", () => {

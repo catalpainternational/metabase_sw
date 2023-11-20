@@ -7,8 +7,9 @@
   (:require
    [clojure.test :refer :all]
    [metabase-enterprise.serialization.v2.backfill-ids :as serdes.backfill]
-   [metabase-enterprise.serialization.v2.seed-entity-ids :as v2.seed-entity-ids]
+   [metabase-enterprise.serialization.v2.entity-ids :as v2.entity-ids]
    [metabase.db.data-migrations]
+   #_{:clj-kondo/ignore [:deprecated-namespace]}
    [metabase.models]
    [metabase.models.revision-test]
    [metabase.models.serialization :as serdes]))
@@ -43,7 +44,6 @@
     :model/CardBookmark
     :model/CollectionBookmark
     :model/DashboardBookmark
-    :metabase.models.collection.root/RootCollection
     :model/CollectionPermissionGraphRevision
     :model/DashboardCardSeries
     :model/LoginHistory
@@ -65,7 +65,6 @@
     :model/QueryCache
     :model/QueryExecution
     :model/Revision
-    :model/FakedCard
     :model/Secret
     :model/Session
     :model/TaskHistory
@@ -76,7 +75,9 @@
     :model/ConnectionImpersonation})
 
 (deftest ^:parallel comprehensive-entity-id-test
-  (doseq [model (->> (v2.seed-entity-ids/toucan-models)
+  (doseq [model (->> (v2.entity-ids/toucan-models)
+                     (remove (fn [model]
+                               (not= (namespace model) "model")))
                      (remove entities-not-exported)
                      (remove entities-external-name))]
     (testing (format (str "Model %s should either: have the ::mi/entity-id property, or be explicitly listed as having "
@@ -85,7 +86,9 @@
       (is (true? (serdes.backfill/has-entity-id? model))))))
 
 (deftest ^:parallel comprehensive-identity-hash-test
-  (doseq [model (->> (v2.seed-entity-ids/toucan-models)
+  (doseq [model (->> (v2.entity-ids/toucan-models)
+                     (remove (fn [model]
+                               (not= (namespace model) "model")))
                      (remove entities-not-exported))]
     (testing (format "Model %s should implement identity-hash-fields" model)
       (is (some? (try

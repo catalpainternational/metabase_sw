@@ -1,14 +1,17 @@
 import {
+  addTextBox,
   editDashboard,
   getDashboardCard,
   openQuestionsSidebar,
   popover,
+  removeDashboardCard,
   restore,
   saveDashboard,
   setFilter,
   showDashboardCardActions,
   sidebar,
   undo,
+  visitDashboard,
 } from "e2e/support/helpers";
 
 const filterDisplayName = "F";
@@ -73,6 +76,20 @@ describe("issue 12926", () => {
 
       getDashboardCard().findByText(queryResult);
     });
+
+    it("should not break virtual cards (metabase#35545)", () => {
+      cy.createDashboard().then(({ body: { id: dashboardId } }) => {
+        visitDashboard(dashboardId);
+      });
+
+      addTextBox("Text card content");
+
+      removeDashboardCard();
+
+      undo();
+
+      getDashboardCard().findByText("Text card content");
+    });
   });
 
   describe("saving a dashboard that retriggers a non saved query (negative id)", () => {
@@ -81,12 +98,13 @@ describe("issue 12926", () => {
       cy.createNativeQuestion(questionDetails);
 
       cy.createDashboard().then(({ body: { id: dashboardId } }) => {
-        cy.visit(`/dashboard/${dashboardId}`);
+        visitDashboard(dashboardId);
       });
 
       editDashboard();
 
       openQuestionsSidebar();
+      // when the card is added to a dashboard, it doesn't use the dashcard endpoint but instead uses the card one
       slowDownCardQuery();
       sidebar().findByText(questionDetails.name).click();
 

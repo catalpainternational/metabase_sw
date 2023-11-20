@@ -77,24 +77,38 @@
                             (pr-str (mapv :lib/desired-column-alias column-metadatas))))
         nil)))
 
+(def ^:private ^:dynamic *recursive-column-resolution-by-name*
+  "Whether we're in a recursive call to [[resolve-column-name]] or not. Prevent infinite recursion (#32063)"
+  false)
+
 (mu/defn ^:private resolve-column-name :- [:maybe lib.metadata/ColumnMetadata]
   "String column name: get metadata from the previous stage, if it exists, otherwise if this is the first stage and we
   have a native query or a Saved Question source query or whatever get it from our results metadata."
   [query        :- ::lib.schema/query
    stage-number :- :int
    column-name  :- ::lib.schema.common/non-blank-string]
-  (let [stage         (if-let [previous-stage-number (lib.util/previous-stage-number query stage-number)]
-                        (lib.util/query-stage query previous-stage-number)
-                        (lib.util/query-stage query stage-number))
-        ;; TODO -- it seems a little icky that the existence of `:metabase.lib.stage/cached-metadata` is leaking here,
-        ;; we should look in to fixing this if we can.
-        stage-columns (or (:metabase.lib.stage/cached-metadata stage)
-                          (get-in stage [:lib/stage-metadata :columns])
-                          (when (:source-card stage)
-                            (lib.metadata.calculation/visible-columns query stage-number stage))
-                          (log/warn (i18n/tru "Cannot resolve column {0}: stage has no metadata" (pr-str column-name))))]
-    (when (seq stage-columns)
-      (resolve-column-name-in-metadata column-name stage-columns))))
+  (when-not *recursive-column-resolution-by-name*
+    (binding [*recursive-column-resolution-by-name* true]
+      (let [previous-stage-number (lib.util/previous-stage-number query stage-number)
+            stage                 (if previous-stage-number
+                                    (lib.util/query-stage query previous-stage-number)
+                                    (lib.util/query-stage query stage-number))
+            ;; TODO -- it seems a little icky that the existence of `:metabase.lib.stage/cached-metadata` is leaking
+            ;; here, we should look in to fixing this if we can.
+            stage-columns         (or (:metabase.lib.stage/cached-metadata stage)
+                                      (get-in stage [:lib/stage-metadata :columns])
+                                      (when (:source-card stage)
+                                        (lib.metadata.calculation/visible-columns query stage-number stage))
+                                      (log/warn (i18n/tru "Cannot resolve column {0}: stage has no metadata"
+                                                          (pr-str column-name))))]
+        (when-let [column (and (seq stage-columns)
+                               (resolve-column-name-in-metadata column-name stage-columns))]
+          (cond-> column
+            previous-stage-number (-> (dissoc :id :table-id
+                                              ::binning ::temporal-unit)
+                                      (lib.join/with-join-alias nil)
+                                      (assoc :name (or (:lib/desired-column-alias column) (:name column)))
+                                      (assoc :lib/source :source/previous-stage))))))))
 
 (mu/defn ^:private resolve-field-metadata :- lib.metadata/ColumnMetadata
   "Resolve metadata for a `:field` ref. This is part of the implementation
@@ -115,11 +129,11 @@
                   (when-let [unit (:temporal-unit opts)]
                     {::temporal-unit unit})
                   (cond
-                    (integer? id-or-name) (resolve-field-id query stage-number id-or-name)
+                    (integer? id-or-name) (or (resolve-field-id query stage-number id-or-name)
+                                              {:lib/type :metadata/column, :name id-or-name})
                     join-alias            {:lib/type :metadata/column, :name id-or-name}
                     :else                 (or (resolve-column-name query stage-number id-or-name)
-                                              {:lib/type :metadata/column
-                                               :name     id-or-name})))]
+                                              {:lib/type :metadata/column, :name id-or-name})))]
     (cond-> metadata
       join-alias (lib.join/with-join-alias join-alias))))
 
@@ -206,7 +220,9 @@
                        table-id           :table-id
                        :as                field-metadata} style]
   (let [field-display-name (or field-display-name
-                               (u.humanization/name->human-readable-name :simple field-name))
+                               (if (string? field-name)
+                                 (u.humanization/name->human-readable-name :simple field-name)
+                                 (str field-name)))
         join-display-name  (when (and (= style :long)
                                       ;; don't prepend a join display name if `:display-name` already contains one!
                                       ;; Legacy result metadata might include it for joined Fields, don't want to add

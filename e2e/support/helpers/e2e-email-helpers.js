@@ -1,3 +1,5 @@
+import { sidebar } from "e2e/support/helpers";
+
 import { WEBMAIL_CONFIG } from "../cypress_data";
 
 const INBOX_TIMEOUT = 5000;
@@ -52,6 +54,13 @@ export const clearInbox = () => {
   return cy.request("DELETE", `http://localhost:${WEB_PORT}/email/all`);
 };
 
+export const viewEmailPage = emailSubject => {
+  const webmailInterface = `http://localhost:${WEB_PORT}`;
+
+  cy.window().then(win => (win.location.href = webmailInterface));
+  cy.findByText(emailSubject).click();
+};
+
 export const openEmailPage = emailSubject => {
   const webmailInterface = `http://localhost:${WEB_PORT}`;
 
@@ -84,14 +93,12 @@ export const openAndAddEmailToSubscriptions = recipient => {
 
 export const setupSubscriptionWithRecipient = recipient => {
   openAndAddEmailToSubscriptions(recipient);
-  cy.findByLabelText("subscriptions sidebar").findByText("Done").click();
+  sidebar().findByText("Done").click();
 };
 
 export const openPulseSubscription = () => {
   cy.findByLabelText("subscriptions").click();
-  cy.findByLabelText("subscriptions sidebar")
-    .findByLabelText("Pulse Card")
-    .click();
+  sidebar().findByLabelText("Pulse Card").click();
 };
 
 export const emailSubscriptionRecipients = () => {

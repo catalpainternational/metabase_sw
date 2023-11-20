@@ -7,7 +7,7 @@
    [clojure.string :as str]
    [clojure.walk :as walk]
    [honey.sql :as sql]
-   [java-time :as t]
+   [java-time.api :as t]
    [metabase.db.spec :as mdb.spec]
    [metabase.driver :as driver]
    [metabase.driver.common :as driver.common]
@@ -819,7 +819,11 @@
 
 (defmethod driver.sql/set-role-statement :postgres
   [_ role]
-  (format "SET ROLE %s;" role))
+  (let [special-chars-pattern #"[^a-zA-Z0-9_]"
+        needs-quote           (re-find special-chars-pattern role)]
+    (if needs-quote
+      (format "SET ROLE \"%s\";" role)
+      (format "SET ROLE %s;" role))))
 
 (defmethod driver.sql/default-database-role :postgres
   [_ _]

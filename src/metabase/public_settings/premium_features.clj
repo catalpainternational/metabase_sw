@@ -99,8 +99,9 @@
 (defn- fetch-token-and-parse-body
   [token base-url]
   (some-> (token-status-url token base-url)
-          (http/get {:query-params {:users     (cached-active-users-count)
-                                    :site-uuid (setting/get :site-uuid-for-premium-features-token-checks)}})
+          (http/get {:query-params {:users      (cached-active-users-count)
+                                    :site-uuid  (setting/get :site-uuid-for-premium-features-token-checks)
+                                    :mb-version (:tag config/mb-version-info)}})
           :body
           (json/parse-string keyword)))
 
@@ -378,7 +379,7 @@
 
 (define-premium-feature ^{:added "0.47.0"} enable-email-restrict-recipients?
   "Enable restrict email recipients?"
-  :serialization)
+  :email-restrict-recipients)
 
 (defsetting is-hosted?
   "Is the Metabase instance running in the cloud?"

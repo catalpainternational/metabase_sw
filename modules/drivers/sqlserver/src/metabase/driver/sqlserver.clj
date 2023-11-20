@@ -5,7 +5,7 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [honeysql.helpers :as hh]
-   [java-time :as t]
+   [java-time.api :as t]
    [metabase.config :as config]
    [metabase.driver :as driver]
    [metabase.driver.common :as driver.common]
@@ -43,6 +43,10 @@
 (defmethod driver/db-start-of-week :sqlserver
   [_]
   :sunday)
+
+(defmethod driver/prettify-native-form :sqlserver
+  [_ native-form]
+  (sql.u/format-sql-and-fix-params :tsql native-form))
 
 ;; See the list here: https://docs.microsoft.com/en-us/sql/connect/jdbc/using-basic-data-types
 (defmethod sql-jdbc.sync/database-type->base-type :sqlserver

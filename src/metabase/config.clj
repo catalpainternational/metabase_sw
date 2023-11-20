@@ -4,8 +4,7 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [environ.core :as env]
-   [metabase.plugins.classloader :as classloader]
-   [metabase.util.log :as log])
+   [metabase.plugins.classloader :as classloader])
   (:import
    (clojure.lang Keyword)
    (java.util UUID)))
@@ -47,8 +46,8 @@
    :mb-jetty-join          "true"
    ;; other application settings
    :mb-password-complexity "normal"
-   :mb-version-info-url    "http://static.metabase.com/version-info.json"
-   :mb-version-info-ee-url "http://static.metabase.com/version-info-ee.json"
+   :mb-version-info-url    "https://static.metabase.com/version-info.json"
+   :mb-version-info-ee-url "https://static.metabase.com/version-info-ee.json"
    :mb-ns-trace            ""                                             ; comma-separated namespaces to trace
    :max-session-age        "20160"                                        ; session length in minutes (14 days)
    :mb-colorize-logs       (str (not is-windows?))                        ; since PowerShell and cmd.exe don't support ANSI color escape codes or emoji,
@@ -124,6 +123,13 @@
    Looks something like `Metabase v0.25.0.RC1`."
   (str "Metabase " (mb-version-info :tag)))
 
+(defn current-major-version
+  "Returns the major version of the running Metabase JAR.
+  When the version.properties file is missing (e.g., running in local dev), returns nil."
+  []
+  (some-> (second (re-find #"\d+\.(\d+)" (:tag mb-version-info)))
+          parse-long))
+
 (defonce ^{:doc "This UUID is randomly-generated upon launch and used to identify this specific Metabase instance during
                 this specifc run. Restarting the server will change this UUID, and each server in a horizontal cluster
                 will have its own ID, making this different from the `site-uuid` Setting."}
@@ -140,27 +146,12 @@
   #_{:clj-kondo/ignore [:discouraged-var]}
   (let [same-site (str/lower-case (config-str :mb-session-cookie-samesite))]
     (when-not (#{"none", "lax", "strict"} same-site)
-      (throw (ex-info "Invalid value for MB_COOKIE_SAMESITE" {:mb-session-cookie-samesite same-site})))
+      (throw (ex-info "Invalid value for MB_SESSION_COOKIE_SAMESITE" {:mb-session-cookie-samesite same-site})))
     (keyword same-site)))
 
 (def ^Keyword mb-session-cookie-samesite
   "Value for session cookie's `SameSite` directive. Must be one of \"none\", \"lax\", or \"strict\" (case insensitive)."
   (mb-session-cookie-samesite*))
-
-;; In 0.41.0 we switched from Leiningen to deps.edn. This warning here to keep people from being bitten in the ass by
-;; the little gotcha described below.
-;;
-;; TODO -- after we've shipped 0.43.0, remove this warning. At that point, the last three shipped major releases will
-;; all be deps.edn based.
-(when (and (not is-prod?)
-           (.exists (io/file ".lein-env")))
-  ;; don't need to i18n since this is a dev-only warning.
-  (log/warn
-   (str "Found .lein-env in the project root directory.\n"
-        "This file was previously created automatically by the Leiningen lein-env plugin.\n"
-        "Environ will use values from it in preference to env var or Java system properties you've specified.\n"
-        "You should delete it; it will be recreated as needed when switching to a branch still using Leiningen.\n"
-        "See https://github.com/metabase/metabase/wiki/Migrating-from-Leiningen-to-tools.deps#custom-env-var-values for more details.")))
 
 (defn mb-user-defaults
   "Default user details provided as a JSON string at launch time for first-user setup flow."
