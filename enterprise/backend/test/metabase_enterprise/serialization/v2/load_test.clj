@@ -409,6 +409,7 @@
                       :aggregation  [[:sum [:field (:id @field1d) nil]]]}
                      (:definition @metric1d))))))))))
 
+#_{:clj-kondo/ignore [:metabase/i-like-making-cams-eyes-bleed-with-horrifically-long-tests]}
 (deftest dashboard-card-test
   ;; DashboardCard.parameter_mappings and Card.parameter_mappings are JSON-encoded lists of parameter maps, which
   ;; contain field IDs - these need to be converted to a portable form and read back in.
@@ -422,6 +423,7 @@
           table1s    (atom nil)
           field1s    (atom nil)
           field2s    (atom nil)
+          field3s    (atom nil)
           dash1s     (atom nil)
           dash2s     (atom nil)
           card1s     (atom nil)
@@ -448,6 +450,7 @@
             (reset! table1s  (ts/create! Table :name "orders" :db_id (:id @db1s)))
             (reset! field1s  (ts/create! Field :name "subtotal" :table_id (:id @table1s)))
             (reset! field2s  (ts/create! Field :name "invoice" :table_id (:id @table1s)))
+            (reset! field3s  (ts/create! Field :name "discount" :table_id (:id @table1s)))
             (reset! user1s   (ts/create! User  :first_name "Tom" :last_name "Scholz" :email "tom@bost.on"))
             (reset! dash1s   (ts/create! Dashboard :name "My Dashboard" :collection_id (:id @coll1s) :creator_id (:id @user1s)))
             (reset! dash2s   (ts/create! Dashboard :name "Linked dashboard" :collection_id (:id @coll1s) :creator_id (:id @user1s)))
@@ -494,7 +497,16 @@
                                                  :parameterMapping
                                                  {mapping-id {:id     mapping-id
                                                               :source {:type "column" :id "Category_ID" :name "Category ID"}
-                                                              :target {:type "dimension" :id mapping-id :dimension mapping-dimension}}}}}}
+                                                              :target {:type "dimension" :id mapping-id :dimension mapping-dimension}}}}}
+                                               (str "[\"ref\",[\"field\"," (:id @field3s) ",null]]")
+                                               {:click_behavior
+                                                {:type     "link"
+                                                 :linkType "question"
+                                                 :targetId (:id @card1s)
+                                                 :parameterMapping
+                                                 {"qweqwe" {:id     "qweqwe"
+                                                            :source {:id "DISCOUNT" :name "Discount" :type "column"}
+                                                            :target {:id "amount_between" :type "variable"}}}}}}
                                               :click_behavior     {:type     "link"
                                                                    :linkType "question"
                                                                    :targetId (:id @card1s)}}
@@ -557,7 +569,17 @@
                                                   {dimension-id
                                                    {:id     dimension-id
                                                     :source {:type "column" :id "Category_ID" :name "Category ID"}
-                                                    :target {:type "dimension" :id dimension-id :dimension dimension}}}}))]
+                                                    :target {:type "dimension" :id dimension-id :dimension dimension}}}})
+                                       (assoc-in [:column_settings
+                                                  "[\"ref\",[\"field\",[\"my-db\",null,\"orders\",\"discount\"],null]]"
+                                                  :click_behavior]
+                                                 {:type "link"
+                                                  :linkType "question"
+                                                  :targetId (:entity_id @card1s)
+                                                  :parameterMapping
+                                                  {"qweqwe" {:id "qweqwe"
+                                                             :source {:id "DISCOUNT" :name "Discount" :type "column"}
+                                                             :target {:id "amount_between" :type "variable"}}}}))]
                   (is (= exp-card
                          (:visualization_settings card)))
                   (is (= exp-dashcard
@@ -945,7 +967,7 @@
                                                                                 :type :snippet,
                                                                                 :snippet-name "filtered data",
                                                                                 :snippet-id (:id @snippet1s)}}}}))
-        (ts/create! User :first_name "Geddy" :last_name "Lee"     :email "glee@rush.yyz")
+        (ts/create! User :first_name "Geddy" :last_name "Lee" :email "glee@rush.yyz")
 
         (testing "on extraction"
           (reset! extracted (serdes/extract-one "Card" {} @card1s))
@@ -963,6 +985,40 @@
                        :template-tags
                        (get "snippet: things")
                        :snippet-id)))))))))
+
+(deftest snippet-with-unique-name
+  (testing "Snippets with the same name should be replaced/removed on deserialization"
+    (mt/with-empty-h2-app-db
+      (let [unique-name "some snippet"
+            snippet     (ts/create! NativeQuerySnippet :name unique-name)
+            id1         (u/generate-nano-id)
+            id2         (u/generate-nano-id)
+            load!       #(serdes.load/load-metabase
+                          (ingestion-in-memory [(serdes/extract-one "NativeQuerySnippet" {} %)]))]
+
+        (testing "setup is correct"
+          (is (= (:entity_id snippet)
+                 (t2/select-one-fn :entity_id NativeQuerySnippet :name unique-name))))
+
+        (testing "loading snippet with same name will get it renamed"
+          (load! (assoc snippet :entity_id id1))
+          (testing "old snippet is in place"
+            (is (= (:entity_id snippet)
+                   (t2/select-one-fn :entity_id NativeQuerySnippet :name unique-name))))
+          (testing "new one got new name"
+            (is (= (str unique-name " (copy)")
+                   (t2/select-one-fn :name NativeQuerySnippet :entity_id id1)))))
+
+        (testing "can handle multiple name conflicts"
+          (load! (assoc snippet :entity_id id2))
+          (is (= (str unique-name " (copy) (copy)")
+                 (t2/select-one-fn :name NativeQuerySnippet :entity_id id2))))
+
+        (testing "will still update original one"
+          (load! (assoc snippet :content "11 = 11"))
+          (is (=? {:name unique-name
+                   :content "11 = 11"}
+                  (t2/select-one NativeQuerySnippet :entity_id (:entity_id snippet)))))))))
 
 (deftest load-action-test
   (let [serialized (atom nil)

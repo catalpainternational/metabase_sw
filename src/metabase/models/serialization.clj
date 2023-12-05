@@ -217,6 +217,18 @@
 (defmethod descendants :default [_ _]
   nil)
 
+(defmulti ascendants
+  "Return set of `[model-name database-id]` pairs for all entities containing this entity, required to successfully
+  load this entity in destination db. Notice that ascendants are searched recursively, but their descendants are not
+  analyzed.
+
+  Dispatched on model-name."
+  {:arglists '([model-name db-id])}
+  (fn [model-name _] model-name))
+
+(defmethod ascendants :default [_ _]
+  nil)
+
 (defn- ingested-model
   "The dispatch function for several of the load multimethods: dispatching on the model of the incoming entity."
   [ingested]
@@ -345,7 +357,9 @@
   (fn [ingested _]
     (ingested-model ingested)))
 
-(defmethod load-one! :default [ingested maybe-local]
+(defn default-load-one!
+  "Default implementation of `load-one!`"
+  [ingested maybe-local]
   (let [model    (ingested-model ingested)
         adjusted (load-xform ingested)]
     (binding [mi/*deserializing?* true]
@@ -353,6 +367,8 @@
         (load-insert! model adjusted)
         (load-update! model adjusted maybe-local)))))
 
+(defmethod load-one! :default [ingested maybe-local]
+  (default-load-one! ingested maybe-local))
 
 (defn entity-id?
   "Checks if the given string is a 21-character NanoID. Useful for telling entity IDs apart from identity hashes."
@@ -937,8 +953,10 @@
   form used internally."
   [mappings]
   (into {} (for [[json-key mapping] mappings]
-             [(keyword (json-mbql-fully-qualified-names->ids json-key))
-              (import-viz-click-behavior-mapping mapping)])))
+             (if (mb.viz/dimension-param-mapping? mapping)
+               [(keyword (json-mbql-fully-qualified-names->ids json-key))
+                (import-viz-click-behavior-mapping mapping)]
+               [json-key mapping]))))
 
 (defn- export-viz-click-behavior [settings]
   (some-> settings
@@ -949,6 +967,16 @@
   (some-> settings
           (m/update-existing    :click_behavior import-viz-click-behavior-link)
           (m/update-existing-in [:click_behavior :parameterMapping] import-viz-click-behavior-mappings)))
+
+(defn- export-pivot-table [settings]
+  (some-> settings
+          (m/update-existing-in [:pivot_table.column_split :rows] ids->fully-qualified-names)
+          (m/update-existing-in [:pivot_table.column_split :columns] ids->fully-qualified-names)))
+
+(defn- import-pivot-table [settings]
+  (some-> settings
+          (m/update-existing-in [:pivot_table.column_split :rows] mbql-fully-qualified-names->ids)
+          (m/update-existing-in [:pivot_table.column_split :columns] mbql-fully-qualified-names->ids)))
 
 (defn- export-visualizations [entity]
   (mbql.u/replace
@@ -996,6 +1024,7 @@
         export-visualizations
         export-viz-link-card
         export-viz-click-behavior
+        export-pivot-table
         (update :column_settings export-column-settings))))
 
 (defn- import-viz-link-card
@@ -1044,6 +1073,7 @@
         import-visualizations
         import-viz-link-card
         import-viz-click-behavior
+        import-pivot-table
         (update :column_settings import-column-settings))))
 
 (defn- viz-link-card-deps

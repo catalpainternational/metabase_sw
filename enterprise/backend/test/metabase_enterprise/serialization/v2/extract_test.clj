@@ -1,6 +1,7 @@
 (ns ^:mb/once metabase-enterprise.serialization.v2.extract-test
   (:require
    [clojure.set :as set]
+   [clojure.string :as str]
    [clojure.test :refer :all]
    [java-time.api :as t]
    [metabase-enterprise.serialization.test-util :as ts]
@@ -1413,12 +1414,15 @@
                      set))))
 
       (testing "selecting a collection gets all its contents"
-        (let [grandchild-paths  #{[{:model "Collection"    :id coll3-eid :label "grandchild_collection"}]
+        (let [grandchild-paths  #{[{:model "Collection"    :id coll1-eid :label "some_collection"}]
+                                  [{:model "Collection"    :id coll2-eid :label "nested_collection"}]
+                                  [{:model "Collection"    :id coll3-eid :label "grandchild_collection"}]
                                   [{:model "Dashboard"     :id dash3-eid :label "dashboard_3"}]
                                   [{:model "Card"          :id c3-1-eid  :label "question_3_1"}]
                                   [{:model "Card"          :id c3-2-eid  :label "question_3_2"}]
                                   [{:model "Card"          :id c3-3-eid  :label "question_3_3"}]}
-              middle-paths      #{[{:model "Collection"    :id coll2-eid :label "nested_collection"}]
+              middle-paths      #{[{:model "Collection"    :id coll1-eid :label "some_collection"}]
+                                  [{:model "Collection"    :id coll2-eid :label "nested_collection"}]
                                   [{:model "Dashboard"     :id dash2-eid :label "dashboard_2"}]
                                   [{:model "Card"          :id c2-1-eid  :label "question_2_1"}]
                                   [{:model "Card"          :id c2-2-eid  :label "question_2_2"}]
@@ -1474,3 +1478,54 @@
                (->> (t2/select-one Field :id fk-id)
                     (serdes/extract-one "Field" {})
                     :fk_target_field_id)))))))
+
+(deftest escape-report-test
+  (mt/with-empty-h2-app-db
+    (ts/with-temp-dpc [Collection    [{coll1-id :id} {:name "Some Collection"}]
+                       Collection    [{coll2-id :id} {:name "Other Collection"}]
+                       Dashboard     [{dash-id :id}  {:name "A Dashboard" :collection_id coll1-id}]
+                       Card          [{card1-id :id} {:name "Some Card"}]
+                       DashboardCard [_              {:card_id card1-id :dashboard_id dash-id}]
+                       Card          [_              {:name          "Dependent Card"
+                                                      :collection_id coll2-id
+                                                      :dataset_query {:query {:source-table (str "card__" card1-id)
+                                                                              :aggregation  [[:count]]}}}]]
+      (testing "Complain about card not available for exporting"
+        (is (some #(str/starts-with? % "Failed to export Dashboard")
+                  (into #{}
+                        (map (fn [[_log-level _error message]] message))
+                        (mt/with-log-messages-for-level ['metabase-enterprise :warn]
+                          (extract/extract {:targets       [["Collection" coll1-id]]
+                                            :no-settings   true
+                                            :no-data-model true}))))))
+
+      (testing "Complain about card depending on an outside card"
+        (is (some #(str/starts-with? % "Failed to export Cards")
+                  (into #{}
+                        (map (fn [[_log-level _error message]] message))
+                        (mt/with-log-messages-for-level ['metabase-enterprise :warn]
+                          (extract/extract {:targets       [["Collection" coll2-id]]
+                                            :no-settings   true
+                                            :no-data-model true})))))))))
+
+(deftest recursive-colls-test
+  (mt/with-empty-h2-app-db
+    (mt/with-temp* [Collection [{parent-id  :id
+                                 parent-eid :entity_id} {:name "Top-Level Collection"}]
+                    Collection [{middle-id  :id
+                                 middle-eid :entity_id} {:name     "Nested Collection"
+                                                         :location (format "/%s/" parent-id)}]
+                    Collection [{nested-id  :id
+                                 nested-eid :entity_id} {:name     "Nested Collection"
+                                                         :location (format "/%s/%s/" parent-id middle-id)}]
+                    Card       [_                       {:name          "Card To Skip"
+                                                         :collection_id parent-id}]
+                    Card       [{ncard-eid :entity_id}  {:name          "Card To Export"
+                                                         :collection_id nested-id}]]
+      (let [ser (extract/extract {:targets       [["Collection" nested-id]]
+                                  :no-settings   true
+                                  :no-data-model true})]
+        (is (= #{parent-eid middle-eid nested-eid}
+               (by-model "Collection" ser)))
+        (is (= #{ncard-eid}
+               (by-model "Card" ser)))))))
