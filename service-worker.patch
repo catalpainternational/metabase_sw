@@ -1,0 +1,146 @@
+diff --git a/frontend/src/metabase/app-embed.js b/frontend/src/metabase/app-embed.js
+index a7436fde51..137e0511a0 100644
+--- a/frontend/src/metabase/app-embed.js
++++ b/frontend/src/metabase/app-embed.js
+@@ -14,3 +14,16 @@ init(reducers, getRoutes, () => {
+     document.body.style.backgroundColor = "transparent";
+   }
+ });
++
++if ("serviceWorker" in navigator) {
++  window.addEventListener("load", () => {
++    navigator.serviceWorker
++      .register("/service-worker.js")
++      .then(registration => {
++        console.warn("SW registered: ", registration);
++      })
++      .catch(registrationError => {
++        console.warn("SW registration failed: ", registrationError);
++      });
++  });
++}
+diff --git a/frontend/src/metabase/sw.js b/frontend/src/metabase/sw.js
+new file mode 100644
+index 0000000000..e99e250f49
+--- /dev/null
++++ b/frontend/src/metabase/sw.js
+@@ -0,0 +1,57 @@
++/* global importScripts, workbox */
++importScripts(
++  "https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js",
++);
++
++// network first for HTML pages
++workbox.routing.registerRoute(
++  ({ url }) => url.pathname === "/" || url.pathname === "/app/",
++  new workbox.strategies.NetworkFirst(),
++);
++
++// ensure quick response for static assets that use cache busting
++workbox.routing.registerRoute(({ url, request, sameOrigin }) => {
++  return (
++    url.pathname.startsWith("/app/dist/") &&
++    url.pathname.match(/.*\..*/) &&
++    url.search.match(/.*[0-9a-f]{20}.*/) &&
++    ["image", "script", "style", "font"].includes(request.destination) &&
++    sameOrigin
++  );
++}, new workbox.strategies.StaleWhileRevalidate());
++
++workbox.routing.registerRoute(
++  ({ url }) => url.pathname.startsWith("/api/embed/dashboard/"),
++  new workbox.strategies.NetworkFirst({
++    cacheName: "embedded-dashboard-cache",
++    plugins: [
++      new workbox.cacheableResponse.CacheableResponsePlugin({
++        statuses: [200, 202],
++      }),
++      new workbox.expiration.ExpirationPlugin({
++        maxAgeSeconds: 365 * 24 * 60 * 60,
++      }),
++    ],
++    cacheKeyWillBeUsed: async ({ request }) => {
++      const fullUrl = request.url;
++      const cacheKey = new URL(fullUrl).pathname;
++      return cacheKey;
++    },
++  }),
++);
++workbox.routing.registerRoute(
++  ({ url }) => url.pathname.startsWith("/api/"),
++  new workbox.strategies.NetworkOnly(),
++  "POST",
++);
++workbox.routing.registerRoute(
++  ({ url }) => url.pathname.startsWith("/api/"),
++  new workbox.strategies.NetworkOnly(),
++  "DELETE",
++);
++
++workbox.routing.setDefaultHandler(new workbox.strategies.NetworkFirst());
++
++self.addEventListener("install", () => {
++  self.skipWaiting();
++});
+diff --git a/package.json b/package.json
+index 2bd4191521..ed0deebeb7 100644
+--- a/package.json
++++ b/package.json
+@@ -217,6 +217,7 @@
+     "babel-plugin-ttag": "^1.7.26",
+     "chromatic": "^6.3.3",
+     "concurrently": "^7.6.0",
++    "copy-webpack-plugin": "^11.0.0",
+     "cross-fetch": "^3.1.5",
+     "css-loader": "1.0.1",
+     "cy-verify-downloads": "^0.1.12",
+diff --git a/src/metabase/server/middleware/security.clj b/src/metabase/server/middleware/security.clj
+index d9555bba30..d628735a01 100644
+--- a/src/metabase/server/middleware/security.clj
++++ b/src/metabase/server/middleware/security.clj
+@@ -56,6 +56,7 @@
+                                    "'unsafe-eval'" ; TODO - we keep working towards removing this entirely
+                                    "https://maps.google.com"
+                                    "https://accounts.google.com"
++                                   "https://storage.googleapis.com/workbox-cdn/"
+                                    (when (public-settings/anon-tracking-enabled)
+                                      "https://www.google-analytics.com")
+                                    ;; for webpack hot reloading
+diff --git a/src/metabase/server/routes.clj b/src/metabase/server/routes.clj
+index 1f421d68f4..a34c4aa931 100644
+--- a/src/metabase/server/routes.clj
++++ b/src/metabase/server/routes.clj
+@@ -48,6 +48,9 @@
+   ;; ^/$ -> index.html
+   (GET "/" [] index/index)
+   (GET "/favicon.ico" [] (response/resource-response (public-settings/application-favicon-url)))
++  ;; the service worker file
++  (GET "/service-worker.js" [] (route/resources "/" {:root "frontend_client/app/dist"}))
++  (GET "/service-worker.js.map" [] (route/resources "/" {:root "frontend_client/app/dist"}))
+   ;; ^/api/health -> Health Check Endpoint
+   (GET "/api/health" []
+        (if (init-status/complete?)
+diff --git a/webpack.config.js b/webpack.config.js
+index 4153e6f259..d46828d52e 100644
+--- a/webpack.config.js
++++ b/webpack.config.js
+@@ -11,6 +11,7 @@ const HtmlWebpackHarddiskPlugin = require("html-webpack-harddisk-plugin");
+ const TerserPlugin = require("terser-webpack-plugin");
+ const WebpackNotifierPlugin = require("webpack-notifier");
+ const ReactRefreshPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
++const CopyWebpackPlugin = require('copy-webpack-plugin');
+ 
+ const fs = require("fs");
+ 
+@@ -241,6 +242,11 @@ const config = (module.exports = {
+     }),
+     // https://github.com/remarkjs/remark/discussions/903
+     new webpack.ProvidePlugin({ process: "process/browser.js" }),
++    new CopyWebpackPlugin({
++      patterns: [
++        { from: SRC_PATH + '/sw.js', to: 'service-worker.js' },
++      ],
++    }),
+   ],
+ });
+ 
