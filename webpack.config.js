@@ -10,6 +10,7 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 const WebpackNotifierPlugin = require("webpack-notifier");
 const ReactRefreshPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 
 const fs = require("fs");
 const path = require("path");
@@ -272,6 +273,9 @@ const config = (module.exports = {
     }),
     // https://github.com/remarkjs/remark/discussions/903
     new webpack.ProvidePlugin({ process: "process/browser.js" }),
+    new CopyWebpackPlugin({
+      patterns: [{ from: SRC_PATH + "/sw.js", to: "service-worker.js" }],
+    }),
     // https://github.com/metabase/metabase/issues/35374
     new webpack.NormalModuleReplacementPlugin(
       /.\/use-popover.js/,
