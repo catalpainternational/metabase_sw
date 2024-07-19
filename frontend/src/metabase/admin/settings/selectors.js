@@ -574,6 +574,17 @@ export const ADMIN_SETTINGS_SECTIONS = {
     component: CloudPanel,
     settings: [],
   },
+  catalpa: {
+    name: t`Catalpa`,
+    order: 133,
+    settings: [
+      {
+        key: "django-sso",
+        display_name: t`Django SSO`,
+        type: "boolean",
+      },
+    ],
+  },
 };
 
 export const getSectionsWithPlugins = _.once(() =>
