@@ -925,3 +925,16 @@ See [fonts](../configuring-metabase/fonts.md).")
   :export?    false
   :default    false
   :type       :boolean)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Additional user-defined settings
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defsetting django-sso
+  (deferred-tru "Enable code to allow single sign on from a Django instance.")
+  :default    false
+  :type       :boolean
+  :export?    true
+  :audit      :getter
+  :visibility :public)
