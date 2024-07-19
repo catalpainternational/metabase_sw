@@ -5,6 +5,7 @@ import _ from "underscore";
 import Tooltip from "metabase/core/components/Tooltip";
 import styles from "metabase/css/core/animation.module.css";
 import { useSelector } from "metabase/lib/redux";
+import { getSetting } from "metabase/selectors/settings";
 import { getUser } from "metabase/selectors/user";
 import { Box } from "metabase/ui";
 
@@ -21,6 +22,11 @@ export const HomeGreeting = (): JSX.Element => {
   const showLogo = useSelector(getHasMetabotLogo);
   const name = user?.first_name;
   const message = useMemo(() => getMessage(name), [name]);
+  const hasDjangoSSO = useSelector(state =>
+    getSetting(state, "django-sso")
+      ? "You're using django-sso"
+      : "You're using regular auth plugins",
+  );
 
   return (
     <GreetingRoot>
@@ -33,7 +39,7 @@ export const HomeGreeting = (): JSX.Element => {
         </Tooltip>
       )}
       <GreetingMessage data-testid="greeting-message" showLogo={showLogo}>
-        {message}
+        {message}, {hasDjangoSSO}
       </GreetingMessage>
     </GreetingRoot>
   );
