@@ -251,6 +251,7 @@ interface AdminSettings {
   "setup-embedding-autoenabled": boolean;
   "setup-license-active-at-setup": boolean;
   "store-url": string;
+  "django-sso": boolean;
 }
 
 interface SettingsManagerSettings {
