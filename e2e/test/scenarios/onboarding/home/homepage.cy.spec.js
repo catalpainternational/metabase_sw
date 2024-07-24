@@ -2,6 +2,7 @@ import { USERS } from "e2e/support/cypress_data";
 import {
   ADMIN_PERSONAL_COLLECTION_ID,
   ORDERS_DASHBOARD_ID,
+  ORDERS_BY_YEAR_QUESTION_ID,
 } from "e2e/support/cypress_sample_instance_data";
 import {
   describeEE,
@@ -22,6 +23,7 @@ import {
   setTokenFeatures,
   entityPickerModal,
   dashboardGrid,
+  visitQuestion,
 } from "e2e/support/helpers";
 
 const { admin } = USERS;
@@ -126,6 +128,33 @@ describe("scenarios > home > homepage", () => {
       cy.findByText("Orders");
     });
 
+    it("should be able to dismiss qbnewq modal using keyboard (metabase#44754)", () => {
+      const randomUser = {
+        email: "random@metabase.test",
+        password: "12341234",
+      };
+
+      // We've already dismissed qbnewq modal for all existing users.
+      cy.log("Create a new admin user and log in as that user");
+      cy.request("POST", "/api/user", randomUser).then(({ body: { id } }) => {
+        cy.request("PUT", `/api/user/${id}`, { is_superuser: true });
+        cy.request("POST", "/api/session", {
+          username: randomUser.email,
+          password: randomUser.password,
+        });
+      });
+
+      cy.intercept("PUT", "/api/user/*/modal/qbnewb").as("modalDismiss");
+      visitQuestion(ORDERS_BY_YEAR_QUESTION_ID);
+      modal()
+        .should("be.visible")
+        .and("contain", "It's okay to play around with saved questions");
+
+      cy.realPress("Escape");
+      cy.wait("@modalDismiss");
+      modal().should("not.exist");
+    });
+
     // TODO: popular items endpoint is currently broken in OSS. Re-enable test once endpoint has been fixed.
     describeEE("EE", () => {
       it("should display popular items for a new user", () => {
@@ -171,6 +200,40 @@ describe("scenarios > home > homepage", () => {
       cy.findByText("Orders in a dashboard").should("be.visible");
       // eslint-disable-next-line no-unscoped-text-selectors -- deprecated usage
       cy.findByText("Orders, Count").should("not.exist");
+    });
+
+    it("should show an alert if applications assets are not served", () => {
+      // intercepting and modifying index.html to cause a network error. originally
+      // attempted to intercept the request for the JS file, but the browser
+      // generally loaded it from a cache, making it difficult to force an error.
+      cy.intercept(
+        {
+          url: "/",
+        },
+        req => {
+          req.continue(res => {
+            res.body = res.body.replace(
+              'src="app/dist/app-main',
+              'src="bad-link.js',
+            );
+            return res;
+          });
+        },
+      );
+
+      cy.on("window:before:load", win => {
+        cy.spy(win.console, "error").as("errorConsole");
+      });
+
+      cy.visit("/");
+      cy.get("@errorConsole").should(
+        "have.been.calledWithMatch",
+        /Could not download asset/,
+      );
+      cy.get("@errorConsole").should(
+        "have.been.calledWithMatch",
+        /bad-link\.js/,
+      );
     });
   });
 });
@@ -428,7 +491,7 @@ describe("scenarios > home > custom homepage", () => {
     it("should not redirect when already on the dashboard homepage (metabase#43800)", () => {
       cy.intercept(
         "GET",
-        `/api/dashboard/${ORDERS_DASHBOARD_ID}/query_metadata`,
+        `/api/dashboard/${ORDERS_DASHBOARD_ID}/query_metadata*`,
       ).as("getDashboardMetadata");
       cy.intercept(
         "POST",

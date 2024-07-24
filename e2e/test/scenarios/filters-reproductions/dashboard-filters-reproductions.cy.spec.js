@@ -37,6 +37,7 @@ import {
   visitPublicDashboard,
   setModelMetadata,
   tableHeaderClick,
+  dashboardParameterSidebar,
 } from "e2e/support/helpers";
 import {
   createMockDashboardCard,
@@ -145,7 +146,7 @@ describe("issue 8030 + 32444", () => {
   };
 
   const interceptRequests = ({ dashboard_id, card1_id, card2_id }) => {
-    cy.intercept("GET", `/api/dashboard/${dashboard_id}`).as("getDashboard");
+    cy.intercept("GET", `/api/dashboard/${dashboard_id}*`).as("getDashboard");
     cy.intercept(
       "POST",
       `/api/dashboard/${dashboard_id}/dashcard/*/card/${card1_id}/query`,
@@ -942,6 +943,30 @@ describe("issue 19494", () => {
     checkAppliedFilter("Card 2 Filter", "Gizmo");
 
     getDashboardCard(1).should("contain", "110.93");
+  });
+});
+
+describe("issue 16177", () => {
+  beforeEach(() => {
+    restore();
+    cy.signInAsAdmin();
+    cy.request("PUT", `/api/field/${ORDERS.QUANTITY}`, {
+      coercion_strategy: "Coercion/UNIXSeconds->DateTime",
+      semantic_type: null,
+    });
+  });
+
+  it("should not lose the default value of the parameter connected to a field with a coercion strategy applied (metabase#16177)", () => {
+    visitDashboard(ORDERS_DASHBOARD_ID);
+    editDashboard();
+    setFilter("Time", "All Options");
+    selectDashboardFilter(getDashboardCard(), "Quantity");
+    dashboardParameterSidebar().findByText("No default").click();
+    popover().findByText("Yesterday").click();
+    saveDashboard();
+    filterWidget().findByText("Yesterday").should("be.visible");
+    visitDashboard(ORDERS_DASHBOARD_ID);
+    filterWidget().findByText("Yesterday").should("be.visible");
   });
 });
 
@@ -2587,7 +2612,7 @@ describe("issue 42829", () => {
   });
 
   // param_fields is null for public dashboards, should be fixed on the BE
-  it.skip("should be able to get field values coming from a sql model-based question in a public dashboard (metabase#42829)", () => {
+  it("should be able to get field values coming from a sql model-based question in a public dashboard (metabase#42829)", () => {
     cy.get("@dashboardId").then(dashboardId =>
       visitPublicDashboard(dashboardId),
     );
@@ -2595,7 +2620,7 @@ describe("issue 42829", () => {
   });
 
   // param_fields is null for embedded dashboards, should be fixed on the BE
-  it.skip("should be able to get field values coming from a sql model-based question in a embedded dashboard (metabase#42829)", () => {
+  it("should be able to get field values coming from a sql model-based question in a embedded dashboard (metabase#42829)", () => {
     cy.get("@dashboardId").then(dashboardId =>
       visitEmbeddedPage({
         resource: { dashboard: dashboardId },
@@ -2820,7 +2845,7 @@ describe("issue 44288", () => {
     visitDashboard("@dashboardId");
     editDashboard();
     verifyMapping();
-    saveDashboard();
+    saveDashboard({ awaitRequest: false });
     verifyFilter();
     cy.signOut();
 
@@ -2839,6 +2864,30 @@ describe("issue 44288", () => {
       }),
     );
     verifyFilter();
+  });
+});
+
+describe("issue 27579", () => {
+  beforeEach(() => {
+    restore();
+    cy.signInAsNormalUser();
+  });
+
+  it("should be able to remove the last exclude hour option (metabase#27579)", () => {
+    visitDashboard(ORDERS_DASHBOARD_ID);
+    editDashboard();
+    setFilter("Time", "All Options");
+    selectDashboardFilter(getDashboardCard(), "Created At");
+    saveDashboard();
+    filterWidget().click();
+    popover().within(() => {
+      cy.findByText("Exclude...").click();
+      cy.findByText("Hours of the day...").click();
+      cy.findByLabelText("12 AM").should("be.checked");
+
+      cy.findByText("Select none...").click();
+      cy.findByLabelText("12 AM").should("not.be.checked");
+    });
   });
 });
 
@@ -3172,6 +3221,86 @@ describe("44047", () => {
 
     cy.log("verify filtering works in a public dashboard");
     cy.get("@dashboardId").then(visitPublicDashboard);
+    verifyFilterWithRemapping();
+  });
+});
+
+describe("issue 45659", () => {
+  const parameterDetails = {
+    name: "ID",
+    slug: "id",
+    id: "f8ec7c71",
+    type: "id",
+    sectionId: "id",
+    default: [10],
+  };
+
+  const questionDetails = {
+    name: "People",
+    query: { "source-table": PEOPLE_ID },
+  };
+
+  const dashboardDetails = {
+    name: "Dashboard",
+    parameters: [parameterDetails],
+    enable_embedding: true,
+    embedding_params: {
+      [parameterDetails.slug]: "enabled",
+    },
+  };
+
+  function createDashboard() {
+    return cy
+      .createDashboardWithQuestions({
+        dashboardDetails,
+        questions: [questionDetails],
+      })
+      .then(({ dashboard, questions: [card] }) => {
+        addOrUpdateDashboardCard({
+          dashboard_id: dashboard.id,
+          card_id: card.id,
+          card: {
+            parameter_mappings: [
+              {
+                card_id: card.id,
+                parameter_id: parameterDetails.id,
+                target: [
+                  "dimension",
+                  ["field", PEOPLE.ID, { "base-type": "type/BigInteger" }],
+                ],
+              },
+            ],
+          },
+        }).then(() => ({ dashboard }));
+      });
+  }
+
+  function verifyFilterWithRemapping() {
+    filterWidget().findByText("Tressa White").should("be.visible");
+  }
+
+  beforeEach(() => {
+    restore();
+    cy.signInAsAdmin();
+    cy.request("PUT", `/api/field/${PEOPLE.ID}`, {
+      has_field_values: "list",
+    });
+  });
+
+  it("should remap initial parameter values in public dashboards (metabase#45659)", () => {
+    createDashboard().then(({ dashboard }) =>
+      visitPublicDashboard(dashboard.id),
+    );
+    verifyFilterWithRemapping();
+  });
+
+  it("should remap initial parameter values in embedded dashboards (metabase#45659)", () => {
+    createDashboard().then(({ dashboard }) =>
+      visitEmbeddedPage({
+        resource: { dashboard: dashboard.id },
+        params: {},
+      }),
+    );
     verifyFilterWithRemapping();
   });
 });
