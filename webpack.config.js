@@ -333,7 +333,16 @@ const config = {
     // https://github.com/remarkjs/remark/discussions/903
     new webpack.ProvidePlugin({ process: "process/browser.js" }),
     new CopyWebpackPlugin({
-      patterns: [{ from: SRC_PATH + "/sw.js", to: "service-worker.js" }],
+      patterns: [
+        {
+          from: path.resolve(__dirname, "frontend/src/metabase/sw.js"),
+          to: path.resolve(
+            __dirname,
+            "resources/frontend_client/app/dist/service-worker.js",
+          ),
+          force: true,
+        },
+      ],
     }),
   ],
 };
