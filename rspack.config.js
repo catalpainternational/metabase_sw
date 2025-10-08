@@ -2,6 +2,7 @@
 /* eslint-env node */
 /* eslint-disable import/no-commonjs */
 const fs = require("fs");
+const path = require("path");
 
 const rspack = require("@rspack/core");
 const ReactRefreshPlugin = require("@rspack/plugin-react-refresh");
@@ -314,6 +315,17 @@ const config = {
     }),
     // https://github.com/remarkjs/remark/discussions/903
     new rspack.ProvidePlugin({ process: "process/browser.js" }),
+    new rspack.CopyRspackPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, "frontend/src/metabase/sw.js"),
+          to: path.resolve(
+            __dirname,
+            "resources/frontend_client/app/dist/service-worker.js",
+          ),
+        },
+      ],
+    }),
   ],
 };
 
