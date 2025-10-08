@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ReactRefreshPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const NodePolyfillPlugin = require("node-polyfill-webpack-plugin");
@@ -331,6 +332,9 @@ const config = {
     }),
     // https://github.com/remarkjs/remark/discussions/903
     new webpack.ProvidePlugin({ process: "process/browser.js" }),
+    new CopyWebpackPlugin({
+      patterns: [{ from: SRC_PATH + "/sw.js", to: "service-worker.js" }],
+    }),
   ],
 };
 

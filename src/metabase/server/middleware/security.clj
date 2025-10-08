@@ -122,6 +122,7 @@
                                  ["'self'"
                                   "https://maps.google.com"
                                   "https://accounts.google.com"
+                                  "https://storage.googleapis.com/workbox-cdn/"
                                   (when (analytics/anon-tracking-enabled)
                                     "https://www.google-analytics.com")
                                   ;; for webpack hot reloading
