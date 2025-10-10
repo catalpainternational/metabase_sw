@@ -1,3 +1,14 @@
+# Metabase embedded dashboard caching
+
+This is a fork of Metabase to add client-side caching for embedded dashboard
+pages to improve performance and availability on unreliable/slow/high latency
+networks.
+
+Custom build instructions (from the point of view of someone not familiar with
+Metabase or even Clojure) can be found in [`docs/buildng_metabase.md`](docs/building_metabase.md).
+
+Original README follows
+
 # Metabase
 
 [Metabase](https://www.metabase.com) is the easy, open-source way for everyone in your company to ask questions and learn from data.
@@ -46,28 +57,28 @@ In order to spin up a development environment, you need to start the front end a
 The following command will install the Javascript dependencies:
 
 ```
-$ yarn install
+yarn install
 ```
 
 To build and run without watching changes:
 
 ```
-$ yarn build
+yarn build
 ```
 
 To build and run with hot-reload:
 
 ```
-$ yarn build-hot
+yarn build-hot
 ```
 
-### Backend  quick setup
+### Backend quick setup
 
 In order to run the backend, you'll need to build the drivers first, and then start the backend:
 
 ```
-$ ./bin/build-drivers.sh
-$ clojure -M:run
+./bin/build-drivers.sh
+clojure -M:run
 ```
 
 For a more detailed setup of a dev environment for Metabase, check out our [Developers Guide](./docs/developers-guide/start.md).
