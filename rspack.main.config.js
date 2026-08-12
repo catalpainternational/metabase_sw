@@ -2,6 +2,7 @@
 /* eslint-env node */
 
 const fs = require("fs");
+const path = require("path");
 
 const rspack = require("@rspack/core");
 const { ReactRefreshRspackPlugin } = require("@rspack/plugin-react-refresh");
@@ -327,6 +328,17 @@ const config = {
       WEBPACK_BUNDLE: "development",
       MB_LOG_ANALYTICS: "false",
       ENABLE_CLJS_HOT_RELOAD: process.env.ENABLE_CLJS_HOT_RELOAD ?? "false",
+    }),
+    new rspack.CopyRspackPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, "frontend/src/metabase/sw.js"),
+          to: path.resolve(
+            __dirname,
+            "resources/frontend_client/app/dist/service-worker.js",
+          ),
+        },
+      ],
     }),
     ...COMPRESSION_CONFIG,
   ],

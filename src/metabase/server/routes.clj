@@ -104,6 +104,9 @@
    ;; ^/$ -> index.html
    (GET "/" [] index/index)
    (GET "/favicon.ico" [] (response/resource-response (appearance/application-favicon-url)))
+   ;; the service worker file
+   (GET "/service-worker.js" [] (route/resources "/" {:root "frontend_client/app/dist"}))
+   (GET "/service-worker.js.map" [] (route/resources "/" {:root "frontend_client/app/dist"}))
    ;; ^/api/health -> Health Check Endpoint
    (GET "/api/health" [] health-handler)
    ;; ^/readyz -> Readiness probe (same implementation as /api/health)
