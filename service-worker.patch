@@ -1,0 +1,145 @@
+diff --git a/frontend/src/metabase/app-embed.ts b/frontend/src/metabase/app-embed.ts
+index b0804f9d38e..cb925c8b6d4 100644
+--- a/frontend/src/metabase/app-embed.ts
++++ b/frontend/src/metabase/app-embed.ts
+@@ -12,3 +12,16 @@ import { getRoutes } from "./routes-embed";
+ setIsStaticEmbedding();
+ 
+ init(publicReducers, getRoutes, () => {});
++
++if ("serviceWorker" in navigator) {
++  window.addEventListener("load", () => {
++    navigator.serviceWorker
++      .register("/service-worker.js")
++      .then((registration) => {
++        console.warn("SW registered: ", registration);
++      })
++      .catch((registrationError) => {
++        console.warn("SW registration failed: ", registrationError);
++      });
++  });
++}
+diff --git a/frontend/src/metabase/sw.js b/frontend/src/metabase/sw.js
+new file mode 100644
+index 00000000000..96c7a6f9084
+--- /dev/null
++++ b/frontend/src/metabase/sw.js
+@@ -0,0 +1,62 @@
++/* global importScripts, workbox */
++importScripts(
++  "https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js",
++);
++
++// network first for HTML pages
++workbox.routing.registerRoute(
++  ({ url }) => url.pathname === "/" || url.pathname === "/app/",
++  new workbox.strategies.NetworkFirst(),
++);
++
++// ensure quick response for static assets that use contenthashed filenames
++workbox.routing.registerRoute(({ url, request, sameOrigin }) => {
++  if (!sameOrigin || !url.pathname.startsWith("/app/dist/")) {
++    return false;
++  }
++  // Matches Metabase's server-side cacheable? rules for fingerprinted assets.
++  const isHashedJsOrCss = /^\/app\/dist\/.+\.[a-f0-9]+\.(js|css)$/.test(
++    url.pathname,
++  );
++  const isHashedAsset = /^\/app\/dist\/[a-f0-9]{8,}[^/]*$/.test(url.pathname);
++  return (
++    (isHashedJsOrCss || isHashedAsset) &&
++    ["image", "script", "style", "font"].includes(request.destination)
++  );
++}, new workbox.strategies.StaleWhileRevalidate());
++
++workbox.routing.registerRoute(
++  ({ url }) => url.pathname.startsWith("/api/embed/dashboard/"),
++  new workbox.strategies.NetworkFirst({
++    cacheName: "embedded-dashboard-cache",
++    plugins: [
++      new workbox.cacheableResponse.CacheableResponsePlugin({
++        statuses: [200, 202],
++      }),
++      new workbox.expiration.ExpirationPlugin({
++        maxAgeSeconds: 365 * 24 * 60 * 60,
++      }),
++    ],
++    cacheKeyWillBeUsed: async ({ request }) => {
++      const fullUrl = request.url;
++      const cacheKey = new URL(fullUrl).pathname;
++      return cacheKey;
++    },
++  }),
++);
++workbox.routing.registerRoute(
++  ({ url }) => url.pathname.startsWith("/api/"),
++  new workbox.strategies.NetworkOnly(),
++  "POST",
++);
++workbox.routing.registerRoute(
++  ({ url }) => url.pathname.startsWith("/api/"),
++  new workbox.strategies.NetworkOnly(),
++  "DELETE",
++);
++
++workbox.routing.setDefaultHandler(new workbox.strategies.NetworkFirst());
++
++self.addEventListener("install", () => {
++  self.skipWaiting();
++});
+diff --git a/rspack.main.config.js b/rspack.main.config.js
+index 384218544dc..e9666c4966b 100644
+--- a/rspack.main.config.js
++++ b/rspack.main.config.js
+@@ -2,6 +2,7 @@
+ /* eslint-env node */
+ 
+ const fs = require("fs");
++const path = require("path");
+ 
+ const rspack = require("@rspack/core");
+ const { ReactRefreshRspackPlugin } = require("@rspack/plugin-react-refresh");
+@@ -328,6 +329,17 @@ const config = {
+       MB_LOG_ANALYTICS: "false",
+       ENABLE_CLJS_HOT_RELOAD: process.env.ENABLE_CLJS_HOT_RELOAD ?? "false",
+     }),
++    new rspack.CopyRspackPlugin({
++      patterns: [
++        {
++          from: path.resolve(__dirname, "frontend/src/metabase/sw.js"),
++          to: path.resolve(
++            __dirname,
++            "resources/frontend_client/app/dist/service-worker.js",
++          ),
++        },
++      ],
++    }),
+     ...COMPRESSION_CONFIG,
+   ],
+ };
+diff --git a/src/metabase/server/middleware/security.clj b/src/metabase/server/middleware/security.clj
+index dc2b7369aa8..1b3824c810d 100644
+--- a/src/metabase/server/middleware/security.clj
++++ b/src/metabase/server/middleware/security.clj
+@@ -237,6 +237,7 @@
+                                     (format "'nonce-%s'" nonce))
+                                   "https://maps.google.com"
+                                   "https://accounts.google.com"
++                                  "https://storage.googleapis.com/workbox-cdn/"
+                                   (when (analytics/anon-tracking-enabled)
+                                     "https://www.google-analytics.com")
+                                   ;; for webpack hot reloading
+diff --git a/src/metabase/server/routes.clj b/src/metabase/server/routes.clj
+index 062d2115fa2..0078d88380e 100644
+--- a/src/metabase/server/routes.clj
++++ b/src/metabase/server/routes.clj
+@@ -104,6 +104,9 @@
+    ;; ^/$ -> index.html
+    (GET "/" [] index/index)
+    (GET "/favicon.ico" [] (response/resource-response (appearance/application-favicon-url)))
++   ;; the service worker file
++   (GET "/service-worker.js" [] (route/resources "/" {:root "frontend_client/app/dist"}))
++   (GET "/service-worker.js.map" [] (route/resources "/" {:root "frontend_client/app/dist"}))
+    ;; ^/api/health -> Health Check Endpoint
+    (GET "/api/health" [] health-handler)
+    ;; ^/readyz -> Readiness probe (same implementation as /api/health)
